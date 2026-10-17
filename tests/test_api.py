@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+import app.main as main_module
 from app import config
 from app.main import app
 
@@ -112,3 +113,30 @@ def test_runtime_config_fails_closed(monkeypatch):
     monkeypatch.setattr(config, "ADMIN_TOKEN", "")
     with pytest.raises(RuntimeError, match="ADMIN_TOKEN"):
         config.validate_runtime_config()
+
+
+def test_chat_thread_is_scoped_to_signed_session(monkeypatch):
+    class Chunk:
+        content = "ok"
+
+    thread_ids = []
+
+    class FakeAgent:
+        def stream(self, _messages, config, stream_mode):
+            thread_ids.append(config["configurable"]["thread_id"])
+            yield Chunk(), {"langgraph_node": "agent"}
+
+    monkeypatch.setattr(main_module, "get_agent", lambda: FakeAgent())
+    conversation_id = "2a3f3f56-9dbf-4eb1-b3d4-fc1b04f990de"
+    payload = {"thread_id": conversation_id, "message": "你好"}
+
+    with TestClient(app) as first:
+        first.get("/api/session")
+        assert first.post("/api/chat", json=payload).status_code == 200
+    with TestClient(app) as second:
+        second.get("/api/session")
+        assert second.post("/api/chat", json=payload).status_code == 200
+
+    assert len(thread_ids) == 2
+    assert thread_ids[0] != thread_ids[1]
+    assert all(thread_id.endswith(conversation_id) for thread_id in thread_ids)
