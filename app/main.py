@@ -1,4 +1,4 @@
-"""FastAPI entry point for the local-first skincare consultation demo."""
+"""FastAPI entry point for a profile-driven consultation assistant."""
 
 import hashlib
 import json
@@ -19,6 +19,8 @@ from .middleware import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
 logger = logging.getLogger(__name__)
 
 FRIENDLY_ERR = "AI 服务暂时不可用，请稍后重试"
+RECORD_LABEL = config.PUBLIC_PROFILE["copy"]["customer_nav"]
+PRODUCT_LABEL = config.PUBLIC_PROFILE["copy"]["product_nav"]
 
 
 @asynccontextmanager
@@ -29,8 +31,10 @@ async def lifespan(_app):
 
 
 app = FastAPI(
-    title="Beauty Faces",
-    description="Local-first AI skincare consultation demo. Not a medical device.",
+    title=config.PUBLIC_PROFILE["branding"]["name"],
+    description=config.PUBLIC_PROFILE["branding"].get(
+        "tagline", "Profile-driven consultation assistant"
+    ),
     lifespan=lifespan,
 )
 app.add_middleware(RequestSizeLimitMiddleware)
@@ -58,10 +62,12 @@ class CustomerBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     age: str = Field(default="", max_length=8)
     sex: str = Field(default="女", max_length=12)
-    nature: str = Field(default="", max_length=40)
     analysis: str = Field(default="", max_length=4000)
     items: dict[str, float | None] = Field(default_factory=dict)
+    attributes: dict[str, str | float | int | None] = Field(default_factory=dict)
     advice: list[str] = Field(default_factory=list, max_length=10)
+    score: str = Field(default="", max_length=20)
+    avatar: str = Field(default="", max_length=500)
 
 
 class LoginBody(BaseModel):
@@ -72,11 +78,12 @@ class ProductBody(BaseModel):
     brand: str = Field(default="", max_length=100)
     name: str = Field(min_length=1, max_length=160)
     category: str = Field(default="", max_length=40)
-    skin_type: str = Field(default="", max_length=80)
-    ingredients: str = Field(default="", max_length=1000)
+    target: str = Field(default="", max_length=120)
+    features: str = Field(default="", max_length=1000)
     price: str = Field(default="", max_length=40)
     description: str = Field(default="", max_length=2000)
     image: str = Field(default="/product-placeholder.svg", max_length=500)
+    attributes: dict[str, str | float | int | None] = Field(default_factory=dict)
 
 
 class ProductUpdateBody(ProductBody):
@@ -91,9 +98,10 @@ def health():
         "privacy": llm.privacy_mode(),
         "llm": config.LLM_MODEL,
         "vlm": config.VLM_MODEL,
+        "profile": config.PUBLIC_PROFILE["id"],
         "customers": db.customer_count(),
         "products": len(db.list_products()),
-        "ingredients": db.ingredient_count(),
+        "knowledge": db.knowledge_count(),
     }
 
 
@@ -125,15 +133,15 @@ def logout(response: Response):
 
 
 @app.get("/api/customers", dependencies=[Depends(auth.require_admin)])
-def customers(keyword: str = "", nature: str = ""):
-    return db.list_customers(keyword=keyword, nature=nature)
+def customers(keyword: str = "", segment: str = ""):
+    return db.list_customers(keyword=keyword, segment=segment)
 
 
 @app.get("/api/customers/{cid}", dependencies=[Depends(auth.require_admin)])
 def customer(cid: str):
     result = db.get_customer(cid)
     if not result:
-        raise HTTPException(404, "客户不存在")
+        raise HTTPException(404, f"{RECORD_LABEL}不存在")
     return result
 
 
@@ -146,7 +154,7 @@ def create_customer(body: CustomerBody):
 @app.delete("/api/customers/{cid}", dependencies=[Depends(auth.require_admin)])
 def remove_customer(cid: str):
     if not db.get_customer(cid):
-        raise HTTPException(404, "客户不存在")
+        raise HTTPException(404, f"{RECORD_LABEL}不存在")
     db.delete_customer(cid)
     return {"ok": True}
 
@@ -164,26 +172,32 @@ def create_product(body: ProductBody):
 @app.put("/api/products/{pid}", dependencies=[Depends(auth.require_admin)])
 def edit_product(pid: int, body: ProductUpdateBody):
     if not db.get_product(pid):
-        raise HTTPException(404, "商品不存在")
+        raise HTTPException(404, f"{PRODUCT_LABEL}不存在")
     return db.update_product(pid, body.model_dump(exclude_unset=True))
 
 
 @app.delete("/api/products/{pid}", dependencies=[Depends(auth.require_admin)])
 def remove_product(pid: int):
     if not db.get_product(pid):
-        raise HTTPException(404, "商品不存在")
+        raise HTTPException(404, f"{PRODUCT_LABEL}不存在")
     db.delete_product(pid)
     return {"ok": True}
 
 
-@app.get("/api/ingredients")
-def ingredients(keyword: str = ""):
-    return db.search_ingredients(keyword=keyword)
+@app.get("/api/knowledge")
+def knowledge(keyword: str = ""):
+    return db.search_knowledge(keyword=keyword)
+
+
+@app.get("/api/ingredients", include_in_schema=False)
+def ingredients_compat(keyword: str = ""):
+    """Backward-compatible alias for the former domain-specific knowledge route."""
+    return db.search_knowledge(keyword=keyword)
 
 
 @app.get("/api/meta")
 def meta():
-    return {"dims": config.DIMS, "categories": [dim["cat"] for dim in config.DIMS]}
+    return config.PUBLIC_PROFILE
 
 
 @app.post("/api/recommend")
@@ -196,7 +210,7 @@ def ai_report(req: ReportRequest, request: Request):
     rate_limit.enforce("ai-report", request)
     result = db.get_customer(req.customer_id)
     if not result:
-        raise HTTPException(404, "客户不存在")
+        raise HTTPException(404, f"{RECORD_LABEL}不存在")
     prompt, weak_dims = rules.build_report_prompt(result)
     try:
         model = llm.get_chat_model()
@@ -208,21 +222,24 @@ def ai_report(req: ReportRequest, request: Request):
     return {
         "report": report,
         "provider": llm.provider_name(),
-        "weak_dims": [{"cat": item["cat"], "score": item["score"]} for item in weak_dims],
+        "weak_dims": [
+            {
+                "id": item["id"],
+                "cat": item["cat"],
+                "label": item["label"],
+                "score": item["score"],
+            }
+            for item in weak_dims
+        ],
+        "alerts": rules.active_alerts(result.get("items", {})),
     }
-
-
-VLM_PROMPT = """你是一位护肤内容助手。请先判断这张照片是否适合做一般性的皮肤外观观察。
-如果照片不是清晰的人脸或皮肤局部照片，请直接说明无法分析，并提示重新上传。
-如果适合，请只描述可见的外观特征，例如干燥、泛红、油光、痘印、肤色不均等；
-不要进行疾病诊断，不要判断癌症或感染，不要声称能替代医生。
-最后给出简短的日常护肤方向，并提醒敏感、破溃、快速变化或持续不适时咨询医生。
-用中文回答，250字以内。"""
 
 
 @app.post("/api/vlm-analyze")
 def vlm_analyze(req: ImageRequest, request: Request):
     rate_limit.enforce("vlm", request)
+    if not config.PUBLIC_PROFILE["assessment"]["enabled"]:
+        raise HTTPException(404, "This profile does not enable visual assessment")
     image = req.image
     if image.strip().startswith("data:"):
         try:
@@ -236,7 +253,8 @@ def vlm_analyze(req: ImageRequest, request: Request):
         yield f"data: {json.dumps(status, ensure_ascii=False)}\n\n"
         for attempt in range(2):
             try:
-                for piece in llm.stream_vlm(image, VLM_PROMPT):
+                prompt = config.load_text(config.PUBLIC_PROFILE["assessment"]["prompt_file"])
+                for piece in llm.stream_vlm(image, prompt):
                     if piece.get("type") != "content":
                         continue
                     emitted = True

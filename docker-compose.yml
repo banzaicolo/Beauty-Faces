@@ -16,6 +16,7 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SEED_DEMO: ${SEED_DEMO:-1}
+      APP_PROFILE: ${APP_PROFILE:-skin_care}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       LLM_MODEL: ${LLM_MODEL:-qwen3.5:4b}
       VLM_MODEL: ${VLM_MODEL:-qwen3-vl:8b}

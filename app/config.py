@@ -1,13 +1,19 @@
-"""Global configuration loaded from environment variables and local JSON files."""
+"""Runtime configuration and active scenario profile."""
 
-import json
 import os
 from pathlib import Path
 
+from .profile import load_profile
+
 BASE_DIR = Path(__file__).parent
-CONFIG_DIR = BASE_DIR / "configs"
+PROFILES_DIR = BASE_DIR / "profiles"
+PROFILE_ID = os.environ.get("APP_PROFILE", "skin_care")
+PROFILE = load_profile(PROFILES_DIR / PROFILE_ID)
+PUBLIC_PROFILE = PROFILE.public_meta()
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(BASE_DIR.parent / "data")))
-DB_PATH = DATA_DIR / "app.db"
+DB_PATH = DATA_DIR / f"{PROFILE_ID}.db"
+CHECKPOINT_DB_PATH = DATA_DIR / f"{PROFILE_ID}-checkpoints.db"
 
 SEED_DEMO = os.environ.get("SEED_DEMO", "0") == "1"
 
@@ -37,14 +43,11 @@ RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"
 
 
 def load_json(name: str):
-    """读 configs/ 下的 JSON 配置文件"""
-    with open(CONFIG_DIR / name, encoding="utf-8") as f:
-        return json.load(f)
+    return PROFILE.read_json(name)
 
 
 def load_text(name: str) -> str:
-    with open(CONFIG_DIR / name, encoding="utf-8") as f:
-        return f.read()
+    return PROFILE.read_text(name)
 
 
 def validate_runtime_config() -> None:
@@ -58,7 +61,3 @@ def validate_runtime_config() -> None:
         errors.append("MAX_REQUEST_BYTES must be at least 1024")
     if errors:
         raise RuntimeError("Unsafe runtime configuration: " + "; ".join(errors))
-
-
-# 检测维度 → 对应检测项目（分越低越需关注）。可在 configs/dims.json 增改，无需改代码
-DIMS = load_json("dims.json")

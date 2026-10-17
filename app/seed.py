@@ -1,8 +1,4 @@
-"""数据导入：把 configs/ 下的种子数据灌入 SQLite。
-用法：python3 -m app.seed  （在项目根目录，幂等可重复执行）
-- 商品：表为空时导入
-- 成分：幂等覆盖
-- 演示客户：默认不导入；设 SEED_DEMO=1 时才灌入完全虚构的 4 份样例"""
+"""Seed the active scenario profile's synthetic fixtures into SQLite."""
 
 import json
 import os
@@ -14,73 +10,77 @@ from . import config, db
 def seed():
     db.init_db()
     conn = db.get_conn()
+    profile = config.PROFILE
 
-    # 1. 完全虚构的演示客户 —— 仅在 SEED_DEMO=1 时导入
-    n_c = 0
+    customer_count = 0
     if (
         os.environ.get("SEED_DEMO") == "1"
         and conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0] == 0
     ):
-        customers = config.load_json("customers.sample.json")
-        for c in customers:
+        for customer in profile.read_json("customers.sample.json"):
+            attributes = customer.get("attributes", {})
             conn.execute(
                 "INSERT OR REPLACE INTO customers "
-                "(id,name,age,sex,nature,ph,water,score,skin_age,items,analysis,advice,avatar) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "(id,name,age,sex,segment,score,items,attributes,analysis,advice,avatar) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    str(c.get("id")),
-                    c.get("name", ""),
-                    str(c.get("age", "")),
-                    c.get("sex", ""),
-                    c.get("nature", ""),
-                    str(c.get("ph", "")),
-                    str(c.get("water", "")),
-                    str(c.get("score", "")),
-                    str(c.get("skinAge", "")),
-                    json.dumps(c.get("items", {}), ensure_ascii=False),
-                    c.get("analysis", ""),
-                    json.dumps(c.get("advice", []), ensure_ascii=False),
-                    c.get("avatar", ""),
+                    str(customer.get("id")),
+                    customer.get("name", ""),
+                    str(customer.get("age", "")),
+                    customer.get("sex", ""),
+                    str(attributes.get(profile.filter_key, "")),
+                    str(customer.get("score", "")),
+                    json.dumps(customer.get("items", {}), ensure_ascii=False),
+                    json.dumps(attributes, ensure_ascii=False),
+                    customer.get("analysis", ""),
+                    json.dumps(customer.get("advice", []), ensure_ascii=False),
+                    customer.get("avatar", ""),
                 ),
             )
-            n_c += 1
+            customer_count += 1
 
-    # 2. 商品 —— 仅当商品表为空时导入，避免容器重启重复累积
-    n_p = 0
+    product_count = 0
     if conn.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0:
-        products = config.load_json("products_seed.json")
-        for p in products:
+        for product in profile.read_json("products.sample.json"):
             conn.execute(
                 "INSERT INTO products "
-                "(brand,name,category,skin_type,ingredients,price,description,image) "
-                "VALUES (?,?,?,?,?,?,?,?)",
+                "(brand,name,category,target,features,price,description,image,attributes) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
                 (
-                    p.get("brand", ""),
-                    p.get("name", ""),
-                    p.get("category", ""),
-                    p.get("skin_type", ""),
-                    p.get("ingredients", ""),
-                    p.get("price", ""),
-                    p.get("description", ""),
-                    p.get("image", ""),
+                    product.get("brand", ""),
+                    product.get("name", ""),
+                    product.get("category", ""),
+                    product.get("target", ""),
+                    product.get("features", ""),
+                    product.get("price", ""),
+                    product.get("description", ""),
+                    product.get("image", ""),
+                    json.dumps(product.get("attributes", {}), ensure_ascii=False),
                 ),
             )
-            n_p += 1
+            product_count += 1
 
-    # 3. 成分库 —— 主键 name 幂等
-    n_i = 0
-    ingredients = config.load_json("ingredients.json")
-    for ing in ingredients:
+    knowledge_count = 0
+    for item in profile.read_json("knowledge.json"):
         conn.execute(
-            "INSERT OR REPLACE INTO ingredients (name,effect,caution) VALUES (?,?,?)",
-            (ing["name"], ing.get("effect", ""), ing.get("caution", "")),
+            "INSERT OR REPLACE INTO knowledge_items "
+            "(name,summary,caution,attributes) VALUES (?,?,?,?)",
+            (
+                item["name"],
+                item.get("summary", ""),
+                item.get("caution", ""),
+                json.dumps(item.get("attributes", {}), ensure_ascii=False),
+            ),
         )
-        n_i += 1
+        knowledge_count += 1
 
     conn.commit()
     conn.close()
-    print(f"导入完成：客户 {n_c}，商品 {n_p}，成分 {n_i}")
-    print(f"数据库：{config.DB_PATH}")
+    print(
+        f"[{profile.id}] seeded customers={customer_count}, "
+        f"products={product_count}, knowledge={knowledge_count}"
+    )
+    print(f"database={config.DB_PATH}")
 
 
 if __name__ == "__main__":

@@ -1,50 +1,69 @@
 # Beauty Faces
 
-面向门店演示场景的本地优先 AI 护肤内容助手。项目把多模态模型、规则化推荐、商品/成分检索、LangGraph 工具调用和客户管理界面组合成一个可运行的 MVP。
+面向垂直推荐场景的本地优先 AI 助手模板。当前内置护肤和头发护理两个场景，通过配置负责品牌文案、客户字段、评分维度、权重、知识库、产品目录、提示词和合成样例；代码只负责通用会话、检索、推荐、鉴权和数据流程。
 
-> 本项目用于护肤内容展示与工程演示，不是医疗器械，不提供疾病诊断，也不能替代皮肤科医生。项目不包含真实客户数据、训练数据集或第三方商品图片。
+> 本项目是工程 MVP，不是医疗产品。不提供疾病诊断，也不能替代医生。仓库不包含真实客户数据、训练数据集或第三方商品图片。
 
-![Beauty Faces 首页](docs/screenshots/home.png)
+| 护肤场景 | 护发场景 |
+|---|---|
+| ![Beauty Faces 首页](docs/screenshots/home.png) | ![Hair Compass 首页](docs/screenshots/hair-care.png) |
 
-## 功能
+## 它现在算 MVP 吗？
 
-- 本地 Ollama 文本模型与视觉模型，支持 DeepSeek 作为可选文本模型
-- LangGraph 多轮对话、工具调用与 SQLite 会话记忆
-- 规则引擎按检测分数计算重点维度并匹配商品
-- 合成商品库、成分库和 4 份完全虚构的客户样例
-- 拍照外观观察、客户档案、商品库管理
-- 管理端使用签名 HttpOnly Cookie，不再把口令保存在浏览器存储中
-- 匿名聊天按签名会话隔离，不能跨会话读取检查点
-- 请求体大小限制、基础速率限制、安全响应头
-- 本地默认绑定 `127.0.0.1`，Docker 使用非 root 用户
+作为**单场景、单租户、可自行部署的垂直推荐 MVP**，算。
+
+它已经具备闭环：会话入口、结构化数据、确定性推荐、产品与知识检索、管理后台、权限隔离、配置切换、合成样例、测试和部署文件。切换 `APP_PROFILE=hair_care` 会同时改变品牌、导航、客户字段、维度、规则、提示词和样例数据，数据库也会按场景隔离。
+
+但它还不是成熟 SaaS：没有个人账号、租户隔离、审计日志、计费、数据迁移平台或生产级共享限流；视觉模型也没有临床验证。适合作为产品验证、作品集和技术底座，不适合直接承载真实医疗诊断。
+
+## 核心能力
+
+- 配置驱动的垂直场景，不需要为新场景改 Python 或前端代码
+- 内置 `skin_care` 与 `hair_care` 两个完整场景
+- Ollama 文本/视觉模型，DeepSeek 可选作文本模型
+- LangGraph 多轮对话、工具调用和 SQLite 会话检查点
+- 加权维度评分、方向配置、重点维度排序和产品匹配
+- 动态客户字段、筛选条件、商品属性、警示规则和提示词
+- 本地 SQLite 数据，按 profile 使用独立数据库文件
+- 管理登录使用签名 HttpOnly Cookie，不把口令存入浏览器存储
+- 匿名聊天按签名会话作用域隔离
+- Docker 非 root 运行、健康检查、本机端口、环境变量和 CI
 
 ## 快速启动
 
 ### 1. 准备模型
-
-先安装 [Ollama](https://ollama.com/)，然后拉取默认模型：
 
 ```bash
 ollama pull qwen3.5:4b
 ollama pull qwen3-vl:8b
 ```
 
-模型标签可能随时间变化。如标签不可用，请修改 `.env` 中的 `LLM_MODEL` 和 `VLM_MODEL`。
+如果模型标签已变化，修改 `.env` 中的 `LLM_MODEL` 或 `VLM_MODEL`。
 
-### 2. 配置密钥
+### 2. 配置
 
 ```bash
 cp .env.example .env
 ```
 
-将 `.env` 中的两个占位值替换为随机值：
+将两个占位值替换为随机值：
 
 ```bash
 openssl rand -hex 24
 openssl rand -base64 48
 ```
 
-`ADMIN_TOKEN` 少于 16 个字符或 `SESSION_SECRET` 少于 32 个字符时，应用会拒绝启动。
+默认使用护肤场景：
+
+```dotenv
+APP_PROFILE=skin_care
+```
+
+切换头发护理示例：
+
+```dotenv
+APP_PROFILE=hair_care
+```
 
 ### 3. Docker 启动
 
@@ -54,7 +73,7 @@ docker compose up --build
 
 打开 <http://127.0.0.1:8000>。
 
-Docker 使用命名卷 `beauty-faces-data` 保存 SQLite 数据库，不会把运行数据写进 Git 工作区。需要连接宿主机 Ollama 时，默认地址是 `http://host.docker.internal:11434`。
+Docker 使用命名卷保存运行数据。需要访问宿主机 Ollama 时，默认地址为 `http://host.docker.internal:11434`。
 
 ### 4. 本地 Python 启动
 
@@ -63,86 +82,121 @@ uv venv
 uv pip install -r requirements-dev.txt
 export ADMIN_TOKEN="$(openssl rand -hex 24)"
 export SESSION_SECRET="$(openssl rand -base64 48)"
+export APP_PROFILE=skin_care
 export SEED_DEMO=1
 export DATA_DIR="./data"
 python -m app.seed
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
+运行头发护理场景时，只需把 `APP_PROFILE` 改为 `hair_care`。两个场景的数据文件分别是 `data/skin_care.db` 和 `data/hair_care.db`。
+
 ## 配置
 
 | 变量 | 必填 | 默认值 | 说明 |
 |---|---:|---|---|
-| `ADMIN_TOKEN` | 是 | 无 | 门店管理口令，至少 16 个字符 |
+| `ADMIN_TOKEN` | 是 | 无 | 管理口令，至少 16 个字符 |
 | `SESSION_SECRET` | 是 | 无 | Cookie 签名密钥，至少 32 个字符 |
+| `APP_PROFILE` | 否 | `skin_care` | `app/profiles/` 下的场景目录 |
 | `DATA_DIR` | 否 | `./data` | 数据库与检查点目录 |
-| `SEED_DEMO` | 否 | `0` | 为 `1` 时导入合成客户样例 |
-| `OLLAMA_URL` | 否 | `http://localhost:11434` | Ollama 地址；容器中通常为宿主机地址 |
+| `SEED_DEMO` | 否 | `0` | 为 `1` 时导入 profile 的合成样例 |
+| `OLLAMA_URL` | 否 | `http://localhost:11434` | Ollama 地址 |
 | `LLM_MODEL` | 否 | `qwen3.5:4b` | 文本与工具调用模型 |
 | `VLM_MODEL` | 否 | `qwen3-vl:8b` | 图片观察模型 |
-| `DEEPSEEK_API_KEY` | 否 | 空 | 设置后，文本请求改走外部 DeepSeek |
+| `DEEPSEEK_API_KEY` | 否 | 空 | 设置后文本请求改走外部 DeepSeek |
 | `COOKIE_SECURE` | 否 | `false` | HTTPS 部署时设为 `true` |
 | `APP_BIND` | 否 | `127.0.0.1` | Docker 映射地址 |
 
-`OLLAMA_URL` 指向远程主机时，图片和文本同样会离开本机。只有确认服务受信任后，界面上的“本地模型模式”才有实际意义。
+`OLLAMA_URL` 指向远程主机时，图片和文本同样会离开本机。只有确认该服务受信任后，“本地模型模式”才成立。
+
+## 场景配置
+
+一个场景位于 `app/profiles/<profile-id>/`：
+
+```text
+profile.json          品牌、文案、字段、维度、权重、方向、匹配数量、警示规则
+system_prompt.txt     智能体行为和工具使用约束
+report_prompt.txt     结构化报告模板，支持 {info}、{conclusions}
+vlm_prompt.txt        可选视觉观察提示词
+customers.sample.json 合成客户样例
+products.sample.json  合成产品目录
+knowledge.json        成分或领域知识条目
+```
+
+推荐逻辑现在是通用的：
+
+1. `profile.json` 声明客户字段和评分项。
+2. `rules.py` 按 item weight 计算维度分数。
+3. `higher_is_better` 决定重点维度排序和颜色方向。
+4. 每个维度的 `category` 对应产品分类。
+5. `top_dimensions` 和 `products_per_dimension` 控制匹配数量。
+6. `alerts` 可配置任意指标阈值提示，不再在代码里写死特定指标。
+
+新增场景的完整步骤见 [场景配置指南](docs/PROFILE_GUIDE.md)。启动时会校验字段引用、维度、产品分类、样例和提示词；配置错误会直接给出明确错误，而不是运行到一半静默失效。
 
 ## 数据与仓库隔离
 
-公开版本采用“代码 + 合成样例”的发布边界：
-
-- 不包含原项目中的 `客户数据_伊斯佳/`、`app/configs/customers_seed.json`、`demo/data.js`、SQLite 数据库和 LangGraph 检查点。
-- 不包含 `archive/` 中的研究数据与 3.8 GB 图像，也不包含 `data/products/` 中的品牌商品图。
-- 不包含 `.workbuddy/`、`.DS_Store`、日志和本地密钥。
-- 客户样例已替换为 4 份完全虚构的数据，ID 使用 `sample-*`，头像字段为空。
-- 商品库已替换为 15 个虚构商品，图片统一使用仓库内生成的 [通用占位图](app/static/product-placeholder.svg)。
-- `data/` 中只保留 `.gitkeep`；数据库、WAL、检查点、私有客户资料和第三方图片均被 `.gitignore` 排除。
-
-如果要在本地保存真实数据，请继续使用不进入 Git 的 `data/app.db` 或独立的 `private/` 目录，并在部署层面做好备份、访问控制和删除策略。
+- 原始项目中的真实客户资料、Word 报表、训练数据集、数据库、聊天检查点和品牌商品图均未复制。
+- 每个场景只包含合成客户与合成产品，图片统一使用 [通用占位图](app/static/product-placeholder.svg)。
+- 每个 profile 使用独立的 SQLite 数据库和检查点文件，不会和另一个场景共用数据。
+- `data/` 只提交 `.gitkeep`；`.gitignore` 排除数据库、WAL、私有资料、第三方图片和密钥。
+- 原始 Beauty-Faces 目录保持不变，真实数据仍留在原目录。
 
 ## 安全设计
 
-- 管理口令和会话密钥缺失或过短时直接拒绝启动，不再提供公开默认口令。
-- 管理登录成功后只下发签名 HttpOnly Cookie，不在 `localStorage` 保存口令。
-- `/api/customers*`、`/api/products*` 和 `/api/ai-report` 均要求管理会话。
-- 匿名智能体不再挂载客户档案查询工具。
-- 匿名聊天的检查点 ID 使用“匿名会话作用域 + 客户端 UUID”，不能仅靠猜另一个 UUID 读取其他会话。
-- 图片请求默认上限 16 MB，聊天消息默认上限 4,000 字符。
-- AI 接口带有单进程滑动窗口限流，仅适合单节点演示。生产环境应换用网关、Redis 或共享限流组件。
-- 所有 API 响应禁止缓存，并附带 CSP、`nosniff`、`DENY` 和权限策略响应头。
-- 视觉接口不向浏览器转发模型的内部思考文本，只显示通用处理状态和最终内容。
+- 管理口令和会话密钥缺失或过短时拒绝启动。
+- 管理登录只下发签名 HttpOnly Cookie。
+- `/api/customers*`、`/api/products*` 和 `/api/ai-report` 要求管理会话。
+- 匿名智能体没有客户档案查询工具。
+- 检查点线程 ID 使用匿名签名会话作用域和客户端 UUID。
+- 请求大小、聊天长度、登录频率和 AI 调用频率均有限制。
+- API 禁止缓存，并附带 CSP、`nosniff`、`DENY` 和权限策略响应头。
+- 前端对动态文案、属性和服务端错误进行 HTML 转义。
 
-## 本次发布改造记录
+## 发布改造记录
 
-以下改动针对公开 GitHub 发布，原始 Beauty-Faces 工作目录保持不变：
+### 第一轮：安全发布
 
-1. 新建独立发布副本，避免真实客户资料、数据库、检查点和研究素材进入首次 Git 提交。
-2. 删除公开默认管理口令，加入启动时的安全配置校验。
-3. 用签名 HttpOnly Cookie 替换 `localStorage` 管理口令。
-4. 为 AI 报告接口增加管理权限，移除匿名智能体读取客户档案的能力。
-5. 为匿名聊天加入签名会话作用域，客户端会话 ID 改为随机 UUID。
-6. 修复编辑商品时图片被空字符串覆盖的问题。
-7. 修复结构化客户检测项无法通过 API 保存的问题，并新增客户删除接口。
-8. 增强 HTML 转义，补充请求大小限制、基础限流、安全头和无缓存策略。
-9. 将真实客户种子替换为合成样例，将品牌商品图和商品种子替换为通用虚构数据。
-10. 增加 `.gitignore`、`.dockerignore`、环境变量模板、直接依赖固定与 `uv.lock`、MIT 许可证和医疗免责声明。
-11. 增加认证、权限、会话、商品图片、客户数据和合成数据测试，以及 GitHub Actions CI。
-12. Docker 默认使用官方 PyPI、非 root 用户、健康检查和本地回环端口映射。
+1. 在独立目录创建发布副本，隔离真实客户资料、数据库和研究素材。
+2. 移除公开默认口令，加入安全配置校验和签名 HttpOnly Cookie。
+3. 修复客户报告越权、会话串读、商品图片覆盖和结构化数据保存问题。
+4. 加固请求大小、限流、安全头、错误处理和 HTML 转义。
+5. 替换为合成客户、合成商品和通用占位图。
+6. 增加 README、许可证、安全策略、环境模板、依赖锁、测试和 CI。
+
+### 第二轮：从行业 Demo 到可扩展 MVP
+
+1. 引入 `app/profile.py`，统一加载和校验场景配置。
+2. 将代码中的护肤术语、维度、客户字段、分类、文案和提示词迁移到 profile。
+3. 将固定平均分改为支持 item 权重的通用评分引擎。
+4. 增加 `higher_is_better`、可配置关注数量、匹配数量、额外指标和阈值警示。
+5. 将客户 `nature/ph/water/skin_age` 等专用字段改为通用 `attributes` JSON。
+6. 将商品 `skin_type/ingredients` 改为通用的 `target/features/attributes`，并保留旧库迁移逻辑。
+7. 将前端客户表单、筛选、详情指标、商品表格和文案改为读取 `/api/meta`。
+8. 将客户和产品路由、数据库表、工具描述从护肤语义中解耦。
+9. 每个 profile 使用独立数据库和检查点文件名。
+10. 新增完整 `hair_care` 示例，CI 矩阵同时验证两个场景。
+11. profile 启动时校验样例引用、分类、警示指标、提示词和推荐参数。
 
 ## 项目结构
 
 ```text
 app/
+  profile.py           profile 加载与校验
+  profiles/            skin_care、hair_care 场景
   agent.py             LangGraph 智能体
   auth.py              签名 Cookie 与会话校验
-  config.py            环境配置
-  db.py                SQLite 数据访问
-  main.py              FastAPI 入口和 API
-  middleware.py        请求大小与安全响应头
+  config.py            环境与 profile 配置
+  db.py                通用 SQLite 数据访问与旧库迁移
+  rules.py             加权评分与推荐
+  tools.py             profile 无关的只读工具
+  main.py              FastAPI API
+  middleware.py        请求限制与安全响应头
   rate_limit.py        单进程限流
-  static/              Web 前端与通用商品占位图
-  configs/             合成样例、维度、成分和提示词
-tests/                 API 与发布边界测试
-.github/workflows/     CI
+  static/              配置驱动前端
+tests/                 API、权限和场景边界测试
+.github/workflows/     skin_care / hair_care 双场景 CI
+docs/                  截图和场景配置指南
 ```
 
 ## 测试
@@ -150,20 +204,22 @@ tests/                 API 与发布边界测试
 ```bash
 pip install -r requirements-dev.txt
 ruff check app tests
-pytest
+
+APP_PROFILE=skin_care pytest
+APP_PROFILE=hair_care pytest
 ```
 
-测试使用临时数据目录和合成数据，不会读取原始客户文件。
+测试使用临时数据目录和 profile 内的合成样例，不读取原始客户文件。当前 CI 会对两个场景分别运行完整 API 测试。
 
 ## 已知限制
 
-- 这是单门店、单节点演示，不是多租户 SaaS。
-- 管理端仍使用共享口令，没有个人账号、审计日志和细粒度角色。
-- 匿名 Cookie 和检查点不会自动到期删除，生产环境需要配置数据保留策略。
-- SQLite 适合单实例演示；多实例部署需要外部数据库和共享会话存储。
-- 视觉模型输出不可作为医学判断，也没有临床验证结论。
-- 当前登录 Cookie、限流和安全机制应配合 HTTPS 反向代理使用。
+- 这是单租户、单节点、单一管理角色的 MVP，不是多租户 SaaS。
+- profile 配置能替换领域语义、字段、评分和样例，但复杂业务仍可能需要自定义表、审批流或外部系统连接器。
+- SQLite 适合单实例；多实例部署需要 PostgreSQL、共享会话和集中式限流。
+- 匿名 Cookie 和检查点尚无自动保留期限。
+- 视觉模型输出没有临床验证，不能作为医疗诊断。
+- 生产部署应增加 HTTPS、反向代理、个人账号、审计日志、备份和删除策略。
 
 ## 许可证
 
-代码使用 [MIT License](LICENSE)。仓库中不包含原项目的真实客户数据、研究数据集或品牌商品图片；如另行下载第三方数据集，请遵守各自许可证。
+代码使用 [MIT License](LICENSE)。场景中的样例和占位图均为仓库自有合成内容；如引入第三方数据、图片或商标，请单独记录来源和许可。

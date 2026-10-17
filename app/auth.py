@@ -23,7 +23,7 @@ def _sign(value: str) -> str:
 
 def _new_token(kind: str, ttl_seconds: int) -> str:
     expires_at = int(time.time()) + ttl_seconds
-    payload = f"{kind}:{expires_at}:{secrets.token_urlsafe(32)}"
+    payload = f"{kind}:{config.PROFILE.id}:{expires_at}:{secrets.token_urlsafe(32)}"
     return f"{payload}.{_sign(payload)}"
 
 
@@ -32,13 +32,17 @@ def _verify(token: str | None, kind: str) -> bool:
         return False
     try:
         payload, signature = token.rsplit(".", 1)
-        token_kind, expires_at, _nonce = payload.split(":", 2)
+        token_kind, profile_id, expires_at, _nonce = payload.split(":", 3)
         expected = _sign(payload)
     except (ValueError, TypeError):
         return False
     if not hmac.compare_digest(signature, expected):
         return False
-    return token_kind == kind and int(expires_at) > int(time.time())
+    return (
+        token_kind == kind
+        and profile_id == config.PROFILE.id
+        and int(expires_at) > int(time.time())
+    )
 
 
 def _set_cookie(response: Response, name: str, token: str, max_age: int) -> None:

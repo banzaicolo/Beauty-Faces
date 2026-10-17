@@ -1,41 +1,41 @@
-// ===== 基础工具 =====
+// ===== Utilities =====
 const $ = s => document.querySelector(s);
 function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function scoreColor(s){
-  if(s==null) return '#5b6478';
-  if(s>=80) return 'var(--good)';
-  if(s>=60) return '#a3e635';
-  if(s>=40) return 'var(--mid)';
+function copy(key, fallback=''){ return (meta.copy && meta.copy[key]) || fallback; }
+function attrValue(record, key){
+  if(record?.attributes && record.attributes[key] != null) return record.attributes[key];
+  return record?.[key] ?? '';
+}
+function attributeField(key){ return (meta.customer_fields || []).find(f => f.key === key); }
+function filterField(){
+  return (meta.customer_fields || []).find(f => f.filterable) || meta.customer_fields?.[0];
+}
+function itemLabel(key){ return meta.item_labels?.[key] || key; }
+function scoreColor(score){
+  if(score==null || Number.isNaN(Number(score))) return '#5b6478';
+  const value = params_meta().higher_is_better ? Number(score) : 100 - Number(score);
+  if(value>=80) return 'var(--good)';
+  if(value>=60) return '#a3e635';
+  if(value>=40) return 'var(--mid)';
   return 'var(--bad)';
 }
-function avg(a){ a = a.filter(v=>v!=null); return a.length ? a.reduce((x,y)=>x+y,0)/a.length : null; }
+function params_meta(){ return meta || {}; }
+function weightedAverage(values){
+  const usable = values.filter(([value,weight]) => value!=null && Number(weight)>0);
+  const totalWeight = usable.reduce((sum,[,weight]) => sum + Number(weight), 0);
+  return usable.length && totalWeight ? usable.reduce((sum,[value,weight]) => sum + Number(value)*Number(weight), 0) / totalWeight : null;
+}
 
 async function api(path, opts={}){
   opts.credentials = 'same-origin';
-  const r = await fetch(path, opts);
-  if(!r.ok){
-    let m; try{ m = (await r.json()).detail || r.statusText; }catch(e){ m = r.statusText; }
-    throw new Error(m);
+  const response = await fetch(path, opts);
+  if(!response.ok){
+    let message; try{ message = (await response.json()).detail || response.statusText; }catch(e){ message = response.statusText; }
+    throw new Error(message);
   }
-  return r.json();
+  return response.json();
 }
 function post(path, body){ return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); }
-
-// ===== 全局状态 =====
-let meta = { dims: [], categories: [] };
-let customersCache = [];
-let productsCache = [];
-let currentNature = '';
-let allNatures = [];
-let currentThread = newThreadId();
-let sending = false;
-let currentCustomer = null;
-let editingProductId = null;
-let vlmImageB64 = null;
-let lastSkinAnalysis = '';
-let isAdmin = false;
-let privacyMode = 'local_llm';
-
 function newThreadId(){
   return crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = crypto.getRandomValues(new Uint8Array(1))[0] % 16;
@@ -43,37 +43,96 @@ function newThreadId(){
   });
 }
 
-// ===== 视图切换 =====
-function switchView(v){
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-  const target = document.querySelector('.nav-item[data-view="'+v+'"]');
-  if(target) target.classList.add('active');
-  document.querySelectorAll('.view').forEach(x=>x.style.display='none');
-  $('#view-' + v).style.display = 'block';
-  if(v === 'customers') loadCustomers();
-  if(v === 'products') loadProducts();
+// ===== State =====
+let meta = {
+  branding: {}, copy: {}, dimensions: [], customer_fields: [],
+  recommendation: {top_dimensions: 3}, categories: [], item_labels: {}, alerts: []
+};
+let customersCache = [];
+let productsCache = [];
+let currentSegment = '';
+let allSegments = [];
+let currentThread = newThreadId();
+let sending = false;
+let currentCustomer = null;
+let editingProductId = null;
+let vlmImageB64 = null;
+let lastAnalysis = '';
+let isAdmin = false;
+let privacyMode = 'local_llm';
+
+// ===== Profile-driven copy =====
+function setText(id, text){
+  const element = document.getElementById(id);
+  if(element && text != null) element.textContent = text;
 }
-document.querySelectorAll('.nav-item').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    const v = btn.dataset.view;
-    if(v === 'customers' || v === 'products'){
-      requireLogin(()=>switchView(v));
-    } else {
-      switchView(v);
+function applyProfile(profile){
+  meta = profile || meta;
+  const brand = meta.branding?.name || 'Consultation Assistant';
+  const tagline = meta.branding?.tagline || '';
+  document.title = tagline ? `${brand} · ${tagline}` : brand;
+  setText('brandName', brand);
+  setText('serviceGroup', copy('service_group', '顾问服务'));
+  setText('adminGroup', copy('admin_group', '管理'));
+  setText('chatNav', copy('chat_nav', '智能顾问'));
+  setText('assessmentNav', copy('assessment_nav', '照片分析'));
+  setText('customerNav', copy('customer_nav', '客户管理'));
+  setText('productNav', copy('product_nav', '产品库'));
+  setText('chatTitle', copy('chat_title', '智能顾问'));
+  setText('chatSub', copy('chat_subtitle', '多轮对话 · 自动查库'));
+  setText('newChatBtn', copy('new_chat', '＋ 新对话'));
+  setText('customersTitle', copy('customers_title', '客户管理'));
+  setText('addCustomerBtn', copy('add_customer', '＋ 新增客户'));
+  setText('assessmentTitle', copy('assessment_title', '照片分析'));
+  setText('assessmentSub', copy('assessment_subtitle', '一般性外观观察'));
+  setText('assessmentUpload', copy('assessment_upload', '选择照片 / 拍照'));
+  setText('assessmentHint', copy('assessment_hint', '照片会发送到所配置的视觉模型服务。'));
+  setText('productsTitle', copy('products_title', '产品库'));
+  setText('addProductBtn', copy('add_product', '＋ 新增产品'));
+  setText('logoutBtn', copy('logout', '退出登录'));
+  setText('vlmBtn', copy('assessment_start', '开始分析'));
+  $('#chatInput').placeholder = copy('chat_placeholder', '输入你的问题…');
+  $('#searchBox').placeholder = copy('customer_search_placeholder', '搜索客户…');
+  $('#productSearch').placeholder = copy('product_search_placeholder', '搜索产品…');
+  const assessmentEnabled = meta.assessment?.enabled !== false;
+  document.querySelector('.nav-item[data-view="camera"]').style.display = assessmentEnabled ? '' : 'none';
+  renderChatWelcome();
+}
+function renderChatWelcome(){
+  const examples = (meta.copy?.chat_examples || []).map(example => `· ${esc(example)}`).join('<br>');
+  const assistant = esc(copy('assistant_name', '顾问'));
+  $('#chatBox').innerHTML = `<div class="msg ai"><div class="avatar-sm">${esc(copy('assistant_name', '顾问').charAt(0))}</div><div class="bubble">你好，我是 ${assistant}。<br>你可以问我：<br>${examples}<br><br><small>${esc(copy('disclaimer'))}</small></div></div>`;
+}
+
+// ===== Views and auth =====
+function switchView(view){
+  document.querySelectorAll('.nav-item').forEach(button => button.classList.remove('active'));
+  const target = document.querySelector('.nav-item[data-view="'+view+'"]');
+  if(target) target.classList.add('active');
+  document.querySelectorAll('.view').forEach(element => element.style.display='none');
+  $('#view-' + view).style.display = 'block';
+  if(view === 'customers') loadCustomers();
+  if(view === 'products') loadProducts();
+}
+document.querySelectorAll('.nav-item').forEach(button => {
+  button.addEventListener('click', () => {
+    const view = button.dataset.view;
+    if(view === 'customers' || view === 'products'){
+      requireLogin(() => switchView(view));
+    }else{
+      switchView(view);
     }
   });
 });
-
-// ===== 门店登录 =====
-function requireLogin(cb){
-  if(isAdmin){ cb(); return; }
-  openAdminLogin(cb);
+function requireLogin(callback){
+  if(isAdmin){ callback(); return; }
+  openAdminLogin(callback);
 }
-function openAdminLogin(cb){
+function openAdminLogin(callback){
   const modal = $('#adminModal');
   modal.innerHTML = `<div class="modal-card" style="max-width:420px">
-    <div class="modal-head"><h3>门店登录</h3><button class="modal-close" onclick="closeModal('adminModal')">✕</button></div>
-    <div class="form-field"><label>管理口令</label><input id="admin-pass" type="password" placeholder="请输入门店管理口令" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="modal-head"><h3>${esc(copy('login_title', '管理登录'))}</h3><button class="modal-close" onclick="closeModal('adminModal')">✕</button></div>
+    <div class="form-field"><label>${esc(copy('login_title', '管理登录'))}</label><input id="admin-pass" type="password" placeholder="请输入管理口令" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div class="hint" id="adminErr" style="color:var(--bad);min-height:18px"></div>
     <div class="form-actions">
       <button class="ghost-btn" onclick="closeModal('adminModal')">取消</button>
@@ -81,19 +140,20 @@ function openAdminLogin(cb){
     </div>
   </div>`;
   modal.classList.add('open');
-  window._adminCb = cb;
-  setTimeout(()=>{ const i = $('#admin-pass'); if(i) i.focus(); }, 50);
+  window._adminCb = callback;
+  setTimeout(() => $('#admin-pass')?.focus(), 50);
 }
 async function doLogin(){
-  const pass = $('#admin-pass').value.trim();
-  if(!pass) return;
+  const password = $('#admin-pass').value.trim();
+  if(!password) return;
   try{
-    await post('/api/login', { password: pass });
+    await post('/api/login', { password });
     isAdmin = true;
     $('#logoutBtn').style.display = 'block';
     closeModal('adminModal');
-    const cb = window._adminCb; window._adminCb = null;
-    if(cb) cb();
+    const callback = window._adminCb;
+    window._adminCb = null;
+    if(callback) callback();
   }catch(e){
     $('#adminErr').textContent = '口令错误，请重试';
   }
@@ -103,64 +163,68 @@ async function logoutAdmin(){
   isAdmin = false;
   $('#logoutBtn').style.display = 'none';
   switchView('chat');
-  alert('已退出门店账号');
+  alert('已退出管理账号');
 }
 
-// ===== 智能顾问（聊天） =====
+// ===== Chat =====
 function addMsg(role, text){
-  const box = $('#chatBox');
   const div = document.createElement('div');
   div.className = 'msg ' + role;
-  if(role === 'ai') div.innerHTML = '<div class="avatar-sm">小肤</div>';
-  const b = document.createElement('div');
-  b.className = 'bubble';
-  b.textContent = text;
-  div.appendChild(b);
-  box.appendChild(div);
+  if(role === 'ai') div.innerHTML = `<div class="avatar-sm">${esc(copy('assistant_name', '顾问').charAt(0))}</div>`;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  div.appendChild(bubble);
+  $('#chatBox').appendChild(div);
   scrollChat();
-  return b;
+  return bubble;
 }
 function scrollChat(){ const box = $('#chatBox'); box.scrollTop = box.scrollHeight; }
 function newChat(){
   currentThread = newThreadId();
-  $('#chatBox').innerHTML = '';
+  renderChatWelcome();
   $('#chatInput').value = '';
   $('#chatInput').focus();
 }
-
 async function sendChat(){
   const input = $('#chatInput');
-  const msg = input.value.trim();
-  if(!msg || sending) return;
+  const message = input.value.trim();
+  if(!message || sending) return;
   input.value = '';
-  addMsg('user', msg);
+  addMsg('user', message);
   const bubble = addMsg('ai', '');
   bubble.innerHTML = '<span class="spinner"></span> 思考中…';
   sending = true;
   $('#chatBtn').disabled = true;
   let first = true;
   try{
-    const resp = await fetch('/api/chat', {
+    const response = await fetch('/api/chat', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ thread_id: currentThread, message: msg })
+      body: JSON.stringify({ thread_id: currentThread, message })
     });
-    if(!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
-    const reader = resp.body.getReader();
+    if(!response.ok) throw new Error((await response.json()).detail || response.statusText);
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buf = '';
+    let buffer = '';
     while(true){
       const { done, value } = await reader.read();
       if(done) break;
-      buf += decoder.decode(value, { stream:true });
-      let idx;
-      while((idx = buf.indexOf('\n\n')) >= 0){
-        const line = buf.slice(0, idx); buf = buf.slice(idx+2);
+      buffer += decoder.decode(value, {stream:true});
+      let index;
+      while((index = buffer.indexOf('\n\n')) >= 0){
+        const line = buffer.slice(0, index);
+        buffer = buffer.slice(index+2);
         if(!line.startsWith('data: ')) continue;
         const payload = line.slice(6).trim();
         if(payload === '[DONE]') continue;
-        let j; try{ j = JSON.parse(payload); }catch(e){ continue; }
-        if(j.error){ bubble.innerHTML = `<span style="color:var(--bad)">出错：${esc(j.error)}</span>`; first = false; }
-        else if(j.token){ if(first){ bubble.innerHTML=''; first=false; } bubble.innerHTML += esc(j.token); }
+        let data; try{ data = JSON.parse(payload); }catch(e){ continue; }
+        if(data.error){
+          bubble.innerHTML = `<span style="color:var(--bad)">出错：${esc(data.error)}</span>`;
+          first = false;
+        }else if(data.token){
+          if(first){ bubble.innerHTML = ''; first = false; }
+          bubble.innerHTML += esc(data.token);
+        }
         scrollChat();
       }
     }
@@ -168,312 +232,234 @@ async function sendChat(){
   }catch(e){
     bubble.innerHTML = `<span style="color:var(--bad)">出错：${esc(e.message)}</span>`;
   }finally{
-    sending = false; $('#chatBtn').disabled = false; scrollChat();
+    sending = false;
+    $('#chatBtn').disabled = false;
+    scrollChat();
   }
 }
 
-// ===== 客户管理 =====
+// ===== Customers =====
 async function loadCustomers(){
-  const kw = $('#searchBox').value.trim();
-  customersCache = await api(`/api/customers?keyword=${encodeURIComponent(kw)}&nature=${encodeURIComponent(currentNature)}`);
-  $('#customerCount').textContent = `共 ${customersCache.length} 位客户`;
+  const keyword = $('#searchBox').value.trim();
+  customersCache = await api(`/api/customers?keyword=${encodeURIComponent(keyword)}&segment=${encodeURIComponent(currentSegment)}`);
+  $('#customerCount').textContent = `共 ${customersCache.length} 条`;
   renderGrid();
-  if(!allNatures.length){
+  if(!allSegments.length){
     const all = await api('/api/customers');
-    allNatures = [...new Set(all.map(c=>c.nature).filter(Boolean))];
+    const field = filterField();
+    allSegments = [...new Set(all.map(customer => attrValue(customer, field?.key)).filter(Boolean))];
     renderChips();
   }
 }
-
 function renderChips(){
-  const el = $('#chips');
-  el.innerHTML = '<div class="chip active" data-f="">全部</div>' +
-    allNatures.map(n=>`<div class="chip" data-f="${esc(n)}">${esc(n)}</div>`).join('');
-  el.querySelectorAll('.chip').forEach(c=>c.addEventListener('click', ()=>{
-    el.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
-    c.classList.add('active');
-    currentNature = c.dataset.f;
+  const element = $('#chips');
+  element.innerHTML = '<div class="chip active" data-f="">全部</div>' +
+    allSegments.map(value => `<div class="chip" data-f="${esc(value)}">${esc(value)}</div>`).join('');
+  element.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
+    element.querySelectorAll('.chip').forEach(item => item.classList.remove('active'));
+    chip.classList.add('active');
+    currentSegment = chip.dataset.f;
     loadCustomers();
   }));
 }
-
 function renderGrid(){
   const grid = $('#grid');
-  if(!customersCache.length){ grid.innerHTML = '<div class="empty">没有匹配的客户</div>'; return; }
-  grid.innerHTML = customersCache.map(d=>`
-    <div class="card" onclick="openDetail('${esc(d.id)}')">
-      <div class="top"><span class="name">${esc(d.name||'未知')}</span><span class="age">${esc(d.age)}岁 · ${esc(d.sex)}</span></div>
-      <div><span class="nature">${esc(d.nature||'—')}</span></div>
-      <div class="meta"><span>肤龄 ${esc(d.skin_age)}岁</span><span class="score">综合 ${esc(d.score)}分</span></div>
-    </div>`).join('');
+  if(!customersCache.length){ grid.innerHTML = '<div class="empty">没有匹配的记录</div>'; return; }
+  const field = filterField();
+  grid.innerHTML = customersCache.map(customer => {
+    const segment = attrValue(customer, field?.key);
+    const details = (meta.customer_fields || [])
+      .filter(item => !item.filterable)
+      .map(item => attrValue(customer, item.key))
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(esc)
+      .join(' · ');
+    return `<div class="card" onclick="openDetail('${esc(customer.id)}')">
+      <div class="top"><span class="name">${esc(customer.name||'未命名')}</span><span class="age">${details}</span></div>
+      <div><span class="nature">${esc(segment||'—')}</span></div>
+      <div class="meta"><span>${esc(field?.label||'')}</span><span class="score">${customer.score?`评分 ${esc(customer.score)}`:'—'}</span></div>
+    </div>`;
+  }).join('');
 }
-
-function computeDims(items){
-  return meta.dims.map(d => {
-    const vals = d.items.map(n => items[n]).filter(v=>v!=null);
-    return { cat:d.cat, label:d.label, items:d.items, score: vals.length ? avg(vals) : null };
-  });
+function computeDimensions(items){
+  return (meta.dimensions || []).map(dimension => {
+    const detail = {};
+    const values = [];
+    for(const item of dimension.items){
+      if(items[item.key] == null) continue;
+      detail[item.key] = items[item.key];
+      values.push([items[item.key], item.weight || 1]);
+    }
+    return {...dimension, detail, score: weightedAverage(values)};
+  }).filter(dimension => dimension.score != null);
 }
-
+function rankDimensions(items){
+  const dimensions = computeDimensions(items);
+  const higherIsBetter = meta.higher_is_better !== false;
+  dimensions.sort((a,b) => higherIsBetter ? a.score-b.score : b.score-a.score);
+  return dimensions;
+}
 async function openDetail(id){
-  const d = await api('/api/customers/' + id);
-  currentCustomer = d;
+  currentCustomer = await api('/api/customers/' + id);
   const modal = $('#detailModal');
   modal.innerHTML = `<div class="modal-card">
-    <div class="modal-head"><h3>客户检测报告</h3><button class="modal-close" onclick="closeModal('detailModal')">✕</button></div>
+    <div class="modal-head"><h3>${esc(copy('customer_detail_title', '客户记录'))}</h3><button class="modal-close" onclick="closeModal('detailModal')">✕</button></div>
     <div id="detailBody"></div>
   </div>`;
   modal.classList.add('open');
-  renderDetailBody(d);
-  loadRecommend(d);
+  renderDetailBody(currentCustomer);
+  loadRecommend(currentCustomer);
 }
-
-function renderDetailBody(d){
-  const items = d.items || {};
-  const dims = computeDims(items).filter(x=>x.score!=null).sort((a,b)=>a.score-b.score);
-  const weak = dims.slice(0,3);
-  const itemEntries = Object.entries(items).filter(([k,v])=>v!=null).sort((a,b)=>a[1]-b[1]);
-  const fluor = items['荧光剂'];
+function renderDetailBody(customer){
+  const items = customer.items || {};
+  const dimensions = rankDimensions(items);
+  const focusCount = Number(meta.recommendation?.top_dimensions || 3);
+  const focused = dimensions.slice(0, focusCount);
+  const itemEntries = Object.entries(items).filter(([,value]) => value!=null)
+    .sort((a,b) => meta.higher_is_better === false ? b[1]-a[1] : a[1]-b[1]);
+  const tags = [];
+  if(customer.age) tags.push(`${customer.age}岁`);
+  if(customer.sex) tags.push(customer.sex);
+  for(const field of meta.customer_fields || []){
+    const value = attrValue(customer, field.key);
+    if(value) tags.push(`${field.label} ${value}${field.unit||''}`);
+  }
+  const alerts = activeAlerts(items);
   $('#detailBody').innerHTML = `
     <div class="hero">
-      <div class="avatar">${esc((d.name||'?').charAt(0))}</div>
+      <div class="avatar">${esc((customer.name||'?').charAt(0))}</div>
       <div class="info">
-        <h2>${esc(d.name||'—')}</h2>
-        <div class="tags">
-          <span class="tag">${esc(d.age)}岁 · ${esc(d.sex)}</span>
-          <span class="tag">${esc(d.nature||'—')}</span>
-          ${d.ph?`<span class="tag">pH ${esc(d.ph)}</span>`:''}
-          ${d.water?`<span class="tag">水分 ${parseFloat(d.water).toFixed(0)}%</span>`:''}
-        </div>
-        <div class="metrics">
-          ${d.score?`<div class="metric"><div class="num">${esc(d.score)}</div><div class="lbl">综合分</div></div>`:''}
-          ${d.skin_age?`<div class="metric"><div class="num">${esc(d.skin_age)}</div><div class="lbl">肤龄(岁)</div></div>`:''}
-          <div class="metric"><div class="num">${esc(d.age||'—')}</div><div class="lbl">实际年龄</div></div>
-        </div>
+        <h2>${esc(customer.name||'—')}</h2>
+        <div class="tags">${tags.map(tag => `<span class="tag">${esc(tag)}</span>`).join('')}</div>
+        ${customer.score?`<div class="metrics"><div class="metric"><div class="num">${esc(customer.score)}</div><div class="lbl">评分</div></div></div>`:''}
       </div>
     </div>
 
     <div class="panel" style="background:linear-gradient(135deg,rgba(34,211,238,.06),rgba(129,140,248,.06));border:1px solid rgba(34,211,238,.2)">
-      <h3>AI 智能分析</h3>
-      <button class="primary-btn" id="aiBtn" onclick="aiAnalyze()">生成 AI 护肤报告</button>
-      <div class="hint">${privacyMode === 'local_llm' ? '当前使用已配置的本地模型；请确认 OLLAMA_URL 确实指向受信任的本机或内网服务。' : '当前已启用外部模型：客户检测数据会发送到所配置的 DeepSeek API。'}</div>
+      <h3>AI 建议</h3>
+      <button class="primary-btn" id="aiBtn" onclick="aiAnalyze()">${esc(copy('report_button', '生成 AI 建议'))}</button>
+      <div class="hint">${privacyMode === 'local_llm' ? '当前使用已配置的本地模型；请确认模型地址受信任。' : '当前使用外部模型，记录内容会发送到所配置的 API。'}</div>
       <div id="aiResult"></div>
     </div>
 
     ${itemEntries.length ? `
     <div class="panel">
-      <h3>四维皮肤状态（分越低越需关注）</h3>
+      <h3>${esc(copy('dimension_heading', '关注维度'))}</h3>
       <div class="dims">
-        ${dims.map(w=>{ const isWeak = weak.includes(w); return `<div class="dim ${isWeak?'weak':''}">
-          <div class="dl"><b>${esc(w.label)}${isWeak?'<span class="badge-focus">重点</span>':''}</b><span>${Math.round(w.score)}分</span></div>
-          <div class="bar"><i style="width:${w.score}%;background:${scoreColor(w.score)}"></i></div>
+        ${dimensions.map(dimension => { const isFocus = focused.includes(dimension); return `<div class="dim ${isFocus?'weak':''}">
+          <div class="dl"><b>${esc(dimension.label)}${isFocus?'<span class="badge-focus">重点</span>':''}</b><span>${Math.round(dimension.score)}分</span></div>
+          <div class="bar"><i style="width:${dimension.score}%;background:${scoreColor(dimension.score)}"></i></div>
         </div>`; }).join('')}
       </div>
-      ${fluor!=null && fluor<40 ? `<div class="warn">⚠ 检测到荧光剂残留风险（评分 ${fluor}），建议加强清洁。</div>` : ''}
+      ${alerts.map(alert => `<div class="warn">⚠ ${esc(alert.message)}</div>`).join('')}
     </div>
-
     <div class="panel">
-      <h3>检测项目评分（正脸 · 共 ${itemEntries.length} 项）</h3>
-      ${itemEntries.map(([k,v])=>`<div class="itemrow">
-        <div class="in">${esc(k)}</div>
-        <div class="track"><i style="width:${v}%;background:${scoreColor(v)}"></i></div>
-        <div class="val" style="color:${scoreColor(v)}">${v}</div>
+      <h3>${esc(copy('item_heading', '指标'))}</h3>
+      ${itemEntries.map(([key,value]) => `<div class="itemrow">
+        <div class="in">${esc(itemLabel(key))}</div>
+        <div class="track"><i style="width:${value}%;background:${scoreColor(value)}"></i></div>
+        <div class="val" style="color:${scoreColor(value)}">${value}</div>
       </div>`).join('')}
     </div>` : ''}
 
-    ${d.analysis?`<div class="panel"><h3>问题分析</h3><div class="analysis">${esc(d.analysis)}</div>
-      <div style="margin-top:12px"><button class="ghost-btn" onclick="askAdvisorForCustomer()">发给智能顾问深入分析</button></div></div>`:''}
-    ${d.advice&&d.advice.length?`<div class="panel"><h3>护理建议</h3><ul class="advice">${d.advice.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></div>`:''}
-
-    ${itemEntries.length ? `<div class="panel"><h3>为你推荐（按皮肤短板匹配）</h3><div id="recoBox"><div class="empty">加载中…</div></div></div>`
-      : `<div class="panel"><h3>产品推荐</h3><div class="empty">该客户暂无检测数据，点上方「发给智能顾问深入分析」，AI 会基于问题分析从商品库挑合适的产品</div></div>`}
+    ${customer.analysis?`<div class="panel"><h3>${esc(copy('analysis_title', '记录摘要'))}</h3><div class="analysis">${esc(customer.analysis)}</div>
+      <div style="margin-top:12px"><button class="ghost-btn" onclick="askAdvisorForCustomer()">${esc(copy('send_to_advisor', '发给智能顾问'))}</button></div></div>`:''}
+    ${customer.advice?.length?`<div class="panel"><h3>${esc(copy('advice_title', '建议'))}</h3><ul class="advice">${customer.advice.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>`:''}
+    ${itemEntries.length ? `<div class="panel"><h3>${esc(copy('recommendation_heading', '匹配产品'))}</h3><div id="recoBox"><div class="empty">加载中…</div></div></div>`:''}
   `;
 }
-
+function activeAlerts(items){
+  return (meta.alerts || []).filter(alert => {
+    const value = items[alert.item];
+    if(value == null) return false;
+    const threshold = Number(alert.threshold || 0);
+    const check = {
+      lt: Number(value) < threshold, lte: Number(value) <= threshold,
+      gt: Number(value) > threshold, gte: Number(value) >= threshold,
+      eq: Number(value) === threshold
+    };
+    return check[alert.operator] || false;
+  });
+}
 function askAdvisorForCustomer(){
   if(!currentCustomer) return;
-  const d = currentCustomer;
-  const parts = [d.age?`${d.age}岁`:'', d.sex||'', d.nature||''];
+  const details = [];
+  for(const field of meta.customer_fields || []){
+    const value = attrValue(currentCustomer, field.key);
+    if(value) details.push(`${field.label} ${value}`);
+  }
   document.querySelector('.nav-item[data-view="chat"]').click();
-  $('#chatInput').value = `以下是我已获授权使用的护肤检测记录，未包含姓名：${parts.filter(Boolean).join('，')}。\n结果：\n${d.analysis||'暂无'}\n请从商品库里挑合适的产品推荐，并给护理建议。`;
+  $('#chatInput').value = `以下是我已获授权使用的${copy('customer_detail_title', '记录')}，未包含姓名：${details.join('，')}。\n${currentCustomer.analysis||'暂无摘要'}\n请给出产品匹配与一般建议。`;
   closeModal('detailModal');
   sendChat();
 }
-
-async function loadRecommend(d){
+async function loadRecommend(customer){
   const box = $('#recoBox');
   if(!box) return;
   try{
-    const recos = await post('/api/recommend', { items: d.items||{} });
-    if(!recos.length){ box.innerHTML = '<div class="empty">暂无推荐</div>'; return; }
-    box.innerHTML = recos.map(r=>`
+    const recommendations = await post('/api/recommend', { items: customer.items || {} });
+    if(!recommendations.length){ box.innerHTML = '<div class="empty">暂无推荐</div>'; return; }
+    box.innerHTML = recommendations.map(recommendation => `
       <div class="reco-group">
-        <div class="rg-title">${esc(r.label)}护理 · ${esc(r.cat)} <span class="why">（该维度 ${Math.round(r.score)} 分）</span></div>
-        <div class="prods">
-          ${r.products.map(p=>`<div class="prod">
-            ${p.image ? `<img class="prod-img" src="${esc(p.image)}" loading="lazy">` : ''}
-            <div class="brand">${esc(p.brand)}</div>
-            <div class="pname">${esc(p.name)}</div>
-            <div class="desc">${esc(p.description)}</div>
-            <div class="ing">成分：${esc(p.ingredients)}</div>
-            <div class="foot"><span class="price">${esc(p.price)}</span><span>${esc(p.skin_type)}</span></div>
-          </div>`).join('')}
-        </div>
+        <div class="rg-title">${esc(recommendation.label)} <span class="why">（${Math.round(recommendation.score)} 分）</span></div>
+        <div class="prods">${recommendation.products.map(product => `<div class="prod">
+          ${product.image ? `<img class="prod-img" src="${esc(product.image)}" loading="lazy">` : ''}
+          <div class="brand">${esc(product.brand)}</div>
+          <div class="pname">${esc(product.name)}</div>
+          <div class="desc">${esc(product.description)}</div>
+          <div class="ing">${esc(copy('product_features_label'))}: ${esc(product.features)}</div>
+          <div class="foot"><span class="price">${esc(product.price)}</span><span>${esc(product.target)}</span></div>
+        </div>`).join('')}</div>
       </div>`).join('');
   }catch(e){
-    $('#recoBox').innerHTML = `<div class="warn">推荐加载失败：${esc(e.message)}</div>`;
+    box.innerHTML = `<div class="warn">推荐加载失败：${esc(e.message)}</div>`;
   }
 }
-
 async function aiAnalyze(){
   if(!currentCustomer) return;
-  const btn = $('#aiBtn'), box = $('#aiResult');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 生成中…';
+  const button = $('#aiBtn'), box = $('#aiResult');
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner"></span> 生成中…';
   box.innerHTML = '';
   try{
     const data = await post('/api/ai-report', { customer_id: currentCustomer.id });
-    const tags = (data.weak_dims||[]).map(w=>`<span class="ai-tag">${esc(w.cat)} ${w.score}分</span>`).join('');
+    const tags = (data.weak_dims||[]).map(item => `<span class="ai-tag">${esc(item.label)} ${item.score}分</span>`).join('');
     box.innerHTML = `<div class="ai-result">${esc(data.report)}</div><div class="ai-tags">${tags}</div>`;
   }catch(e){
     box.innerHTML = `<div class="warn">生成失败：${esc(e.message)}</div>`;
   }finally{
-    btn.disabled = false; btn.innerHTML = '生成 AI 护肤报告';
+    button.disabled = false;
+    button.textContent = copy('report_button', '生成 AI 建议');
   }
 }
 
-function closeModal(id){ $('#'+id).classList.remove('open'); }
-
-// ===== 拍照测肤 =====
-document.getElementById('vlmFile').addEventListener('change', function(){
-  const file = this.files && this.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = e=>{
-    const img = new Image();
-    img.onload = ()=>{
-      const MAX = 1280; let w = img.width, h = img.height;
-      const scale = Math.min(1, MAX/Math.max(w,h));
-      w = Math.round(w*scale); h = Math.round(h*scale);
-      const c = document.createElement('canvas'); c.width=w; c.height=h;
-      c.getContext('2d').drawImage(img, 0, 0, w, h);
-      vlmImageB64 = c.toDataURL('image/jpeg', 0.85);
-      const pv = $('#vlmPreview'); pv.src = vlmImageB64; pv.style.display = 'block';
-      $('#vlmBtn').disabled = false; $('#vlmResult').innerHTML = '';
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-});
-
-async function vlmAnalyze(){
-  if(!vlmImageB64) return;
-  const btn = $('#vlmBtn'), box = $('#vlmResult');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 分析中…';
-  // 流式：思考过程灰字实时滚动，正文逐字打出，进度一目了然
-  box.innerHTML = `<div class="vlm-thinking-box"><div class="vlm-thinking-label">AI 正在观察照片…</div><div class="vlm-thinking" id="vlmThinking"></div></div>
-    <div class="vlm-result" id="vlmContent" style="display:none"></div>`;
-  const thEl = $('#vlmThinking'), ctEl = $('#vlmContent');
-  const thBox = thEl.parentElement;
-  try{
-    const resp = await fetch('/api/vlm-analyze', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ image: vlmImageB64 })
-    });
-    if(!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '', analysis = '';
-    while(true){
-      const { done, value } = await reader.read();
-      if(done) break;
-      buf += decoder.decode(value, { stream:true });
-      let idx;
-      while((idx = buf.indexOf('\n\n')) >= 0){
-        const line = buf.slice(0, idx); buf = buf.slice(idx+2);
-        if(!line.startsWith('data: ')) continue;
-        const payload = line.slice(6).trim();
-        if(payload === '[DONE]') continue;
-        let j; try{ j = JSON.parse(payload); }catch(e){ continue; }
-        if(j.error) throw new Error(j.error);
-        if(j.type === 'thinking'){
-          thEl.textContent += j.text;
-          thBox.scrollTop = thBox.scrollHeight;
-        }else if(j.type === 'content'){
-          if(ctEl.style.display === 'none'){ thBox.querySelector('.vlm-thinking-label').textContent = '分析完成'; ctEl.style.display = 'block'; }
-          analysis += j.text;
-          ctEl.textContent = analysis;
-        }
-      }
-    }
-    if(!analysis) analysis = thEl.textContent || '（无结果）';
-    lastSkinAnalysis = analysis;
-    ctEl.insertAdjacentHTML('afterend', `
-      <div class="vlm-actions">
-        <button class="primary-btn" onclick="saveVlmAsCustomer()">存为客户</button>
-        <button class="ghost-btn" onclick="askAdvisorAboutSkin()">发给智能顾问分析</button>
-      </div>
-      <div class="vlm-save-form" id="vlmSaveForm" style="display:none">
-        <div class="svf-row">
-          <input id="vlm-c-name" placeholder="姓名（必填）">
-          <input id="vlm-c-age" placeholder="年龄" type="number" min="1" max="120">
-          <select id="vlm-c-sex"><option>女</option><option>男</option></select>
-          <select id="vlm-c-nature">
-            <option value="">肤质…</option><option>中性皮肤</option><option>干性皮肤</option>
-            <option>油性皮肤</option><option>混合型皮肤</option><option>敏感肌</option>
-          </select>
-          <button class="primary-btn" onclick="confirmSaveVlmCustomer()">保存</button>
-        </div>
-      </div>`);
-  }catch(e){
-    box.innerHTML = `<div class="warn">分析失败：${esc(e.message)}</div>`;
-  }finally{
-    btn.disabled = false; btn.innerHTML = '开始分析';
+// ===== Customer forms =====
+function attributeInputHtml(prefix, field, value=''){
+  const id = `${prefix}-${field.key}`;
+  if(field.type === 'select'){
+    const options = (field.options || []).map(option => `<option ${String(option)===String(value)?'selected':''}>${esc(option)}</option>`).join('');
+    return `<div class="form-field"><label>${esc(field.label)}</label><select id="${esc(id)}"><option value="">未填写</option>${options}</select></div>`;
   }
+  const type = field.type === 'number' ? 'number' : 'text';
+  return `<div class="form-field"><label>${esc(field.label)}</label><input id="${esc(id)}" type="${type}" value="${esc(value)}" placeholder="${esc(field.placeholder||'')}"></div>`;
 }
-
-// ===== 测肤结果联动 =====
-function saveVlmAsCustomer(){
-  if(!isAdmin){ requireLogin(saveVlmAsCustomer); return; }
-  $('#vlmSaveForm').style.display = 'block';
-}
-async function confirmSaveVlmCustomer(){
-  const name = $('#vlm-c-name').value.trim();
-  if(!name){ alert('请填写姓名'); return; }
-  try{
-    await post('/api/customers', {
-      name,
-      age: $('#vlm-c-age').value,
-      sex: $('#vlm-c-sex').value,
-      nature: $('#vlm-c-nature').value,
-      analysis: lastSkinAnalysis
-    });
-    $('#vlmSaveForm').style.display = 'none';
-    alert('已保存到客户管理，数据持久化在本地数据库');
-  }catch(e){
-    alert('保存失败：' + e.message);
+function readAttributes(prefix){
+  const attributes = {};
+  for(const field of meta.customer_fields || []){
+    const value = document.getElementById(`${prefix}-${field.key}`)?.value.trim();
+    if(value) attributes[field.key] = value;
   }
+  return attributes;
 }
-function askAdvisorAboutSkin(){
-  if(!lastSkinAnalysis) return;
-  document.querySelector('.nav-item[data-view="chat"]').click();
-  $('#chatInput').value = `我刚做了拍照测肤，AI 视觉分析结果如下：\n${lastSkinAnalysis}\n请根据我的皮肤状况，从商品库里挑合适的产品推荐，并给护理建议。`;
-  sendChat();
-}
-
-// ===== 新增客户 =====
 function openCustomerForm(){
   const modal = $('#detailModal');
   modal.innerHTML = `<div class="modal-card">
-    <div class="modal-head"><h3>新增客户</h3><button class="modal-close" onclick="closeModal('detailModal')">✕</button></div>
+    <div class="modal-head"><h3>${esc(copy('add_customer', '新增客户'))}</h3><button class="modal-close" onclick="closeModal('detailModal')">✕</button></div>
     <div class="form-grid">
-      <div class="form-field"><label>姓名 *</label><input id="c-name" placeholder="客户姓名"></div>
-      <div class="form-field"><label>年龄</label><input id="c-age" type="number" min="1" max="120"></div>
-      <div class="form-field"><label>性别</label><select id="c-sex"><option>女</option><option>男</option></select></div>
-      <div class="form-field"><label>肤质</label><select id="c-nature">
-        <option value="">未测</option><option>中性皮肤</option><option>干性皮肤</option>
-        <option>油性皮肤</option><option>混合型皮肤</option><option>敏感肌</option>
-      </select></div>
-      <div class="form-field full"><label>备注 / 皮肤情况</label><textarea id="c-analysis" rows="3" placeholder="可选，如：两颊干燥，T区偏油"></textarea></div>
+      <div class="form-field"><label>姓名 *</label><input id="customer-name" placeholder="姓名"></div>
+      ${(meta.customer_fields||[]).map(field => attributeInputHtml('customer', field)).join('')}
+      <div class="form-field full"><label>${esc(copy('analysis_title', '备注'))}</label><textarea id="customer-analysis" rows="3"></textarea></div>
     </div>
     <div class="form-actions">
       <button class="ghost-btn" onclick="closeModal('detailModal')">取消</button>
@@ -482,73 +468,174 @@ function openCustomerForm(){
   </div>`;
   modal.classList.add('open');
 }
-
 async function saveNewCustomer(){
-  const name = $('#c-name').value.trim();
+  const name = $('#customer-name').value.trim();
   if(!name){ alert('请填写姓名'); return; }
   try{
     await post('/api/customers', {
       name,
-      age: $('#c-age').value,
-      sex: $('#c-sex').value,
-      nature: $('#c-nature').value,
-      analysis: $('#c-analysis').value.trim()
+      attributes: readAttributes('customer'),
+      analysis: $('#customer-analysis').value.trim()
     });
     closeModal('detailModal');
-    currentNature = '';
+    currentSegment = '';
+    allSegments = [];
     loadCustomers();
   }catch(e){
     alert('保存失败：' + e.message);
   }
 }
 
-// ===== 商品库 =====
+// ===== Visual assessment =====
+document.getElementById('vlmFile').addEventListener('change', function(){
+  const file = this.files && this.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = event => {
+    const image = new Image();
+    image.onload = () => {
+      const max = 1280;
+      const scale = Math.min(1, max/Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(image.width*scale);
+      canvas.height = Math.round(image.height*scale);
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      vlmImageB64 = canvas.toDataURL('image/jpeg', 0.85);
+      $('#vlmPreview').src = vlmImageB64;
+      $('#vlmPreview').style.display = 'block';
+      $('#vlmBtn').disabled = false;
+      $('#vlmResult').innerHTML = '';
+    };
+    image.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+async function vlmAnalyze(){
+  if(!vlmImageB64) return;
+  const button = $('#vlmBtn'), box = $('#vlmResult');
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner"></span> 分析中…';
+  box.innerHTML = `<div class="vlm-thinking-box"><div class="vlm-thinking-label">正在观察照片…</div><div class="vlm-thinking" id="vlmThinking"></div></div>
+    <div class="vlm-result" id="vlmContent" style="display:none"></div>`;
+  const thinking = $('#vlmThinking'), content = $('#vlmContent');
+  try{
+    const response = await fetch('/api/vlm-analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ image: vlmImageB64 })
+    });
+    if(!response.ok) throw new Error((await response.json()).detail || response.statusText);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '', analysis = '';
+    while(true){
+      const { done, value } = await reader.read();
+      if(done) break;
+      buffer += decoder.decode(value, {stream:true});
+      let index;
+      while((index = buffer.indexOf('\n\n')) >= 0){
+        const line = buffer.slice(0, index);
+        buffer = buffer.slice(index+2);
+        if(!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if(payload === '[DONE]') continue;
+        let data; try{ data = JSON.parse(payload); }catch(e){ continue; }
+        if(data.error) throw new Error(data.error);
+        if(data.type === 'thinking'){
+          thinking.textContent += data.text;
+        }else if(data.type === 'content'){
+          if(content.style.display === 'none'){ thinking.parentElement.querySelector('.vlm-thinking-label').textContent = '分析完成'; content.style.display = 'block'; }
+          analysis += data.text;
+          content.textContent = analysis;
+        }
+      }
+    }
+    lastAnalysis = analysis || thinking.textContent || '（无结果）';
+    content.insertAdjacentHTML('afterend', `
+      <div class="vlm-actions">
+        <button class="primary-btn" onclick="saveAssessmentAsCustomer()">${esc(copy('save_customer', '保存为客户'))}</button>
+        <button class="ghost-btn" onclick="askAdvisorAboutAssessment()">${esc(copy('send_to_advisor', '发给智能顾问'))}</button>
+      </div>
+      <div class="vlm-save-form" id="vlmSaveForm" style="display:none">
+        <div class="form-grid">
+          <div class="form-field"><label>姓名 *</label><input id="vlm-name" placeholder="姓名"></div>
+          ${(meta.customer_fields||[]).map(field => attributeInputHtml('vlm', field)).join('')}
+        </div>
+        <button class="primary-btn" onclick="confirmSaveAssessmentCustomer()">保存</button>
+      </div>`);
+  }catch(e){
+    box.innerHTML = `<div class="warn">分析失败：${esc(e.message)}</div>`;
+  }finally{
+    button.disabled = false;
+    button.textContent = copy('assessment_start', '开始分析');
+  }
+}
+function saveAssessmentAsCustomer(){
+  if(!isAdmin){ requireLogin(saveAssessmentAsCustomer); return; }
+  $('#vlmSaveForm').style.display = 'block';
+}
+async function confirmSaveAssessmentCustomer(){
+  const name = $('#vlm-name').value.trim();
+  if(!name){ alert('请填写姓名'); return; }
+  try{
+    await post('/api/customers', {
+      name,
+      attributes: readAttributes('vlm'),
+      analysis: lastAnalysis
+    });
+    $('#vlmSaveForm').style.display = 'none';
+    alert('已保存到本地数据库');
+  }catch(e){
+    alert('保存失败：' + e.message);
+  }
+}
+function askAdvisorAboutAssessment(){
+  if(!lastAnalysis) return;
+  document.querySelector('.nav-item[data-view="chat"]').click();
+  $('#chatInput').value = `我刚完成一次${copy('assessment_title', '照片分析')}，结果如下：\n${lastAnalysis}\n请给出一般建议并说明如何理解结果。`;
+  sendChat();
+}
+
+// ===== Products =====
 async function loadProducts(){
-  const kw = $('#productSearch').value.trim();
-  productsCache = await api('/api/products?keyword=' + encodeURIComponent(kw));
+  const keyword = $('#productSearch').value.trim();
+  productsCache = await api('/api/products?keyword=' + encodeURIComponent(keyword));
   $('#productCount').textContent = `共 ${productsCache.length} 款`;
   renderProductTable();
 }
-
 function renderProductTable(){
-  const el = $('#productTable');
-  if(!productsCache.length){ el.innerHTML = '<div class="empty">暂无商品，点右上角「新增商品」添加</div>'; return; }
-  el.innerHTML = `<thead><tr>
-    <th>图片</th><th>品牌</th><th>名称</th><th>功效</th><th>适用肤质</th><th>成分</th><th>价格</th><th>操作</th>
-  </tr></thead><tbody>` + productsCache.map(p=>`<tr>
-    <td>${p.image ? `<img class="prod-thumb" src="${esc(p.image)}" loading="lazy">` : '<span class="prod-thumb none">—</span>'}</td>
-    <td><span class="brand">${esc(p.brand)}</span></td>
-    <td>${esc(p.name)}</td>
-    <td><span class="cat-badge">${esc(p.category)}</span></td>
-    <td>${esc(p.skin_type)}</td>
-    <td>${esc(p.ingredients)}</td>
-    <td>${esc(p.price)}</td>
+  const element = $('#productTable');
+  if(!productsCache.length){ element.innerHTML = '<div class="empty">暂无产品</div>'; return; }
+  element.innerHTML = `<thead><tr>
+    <th>图片</th><th>品牌</th><th>名称</th><th>${esc(copy('product_category_label', '分类'))}</th><th>${esc(copy('product_target_label', '适用对象'))}</th><th>${esc(copy('product_features_label', '特点'))}</th><th>价格</th><th>操作</th>
+  </tr></thead><tbody>` + productsCache.map(product => `<tr>
+    <td>${product.image ? `<img class="prod-thumb" src="${esc(product.image)}" loading="lazy">` : '<span class="prod-thumb none">—</span>'}</td>
+    <td><span class="brand">${esc(product.brand)}</span></td>
+    <td>${esc(product.name)}</td>
+    <td><span class="cat-badge">${esc(product.category)}</span></td>
+    <td>${esc(product.target)}</td>
+    <td>${esc(product.features)}</td>
+    <td>${esc(product.price)}</td>
     <td style="white-space:nowrap">
-      <button class="edit-btn" onclick="openProductFormById(${p.id})">编辑</button>
-      <button class="danger-btn" onclick="deleteProduct(${p.id})">删除</button>
+      <button class="edit-btn" onclick="openProductFormById(${product.id})">编辑</button>
+      <button class="danger-btn" onclick="deleteProduct(${product.id})">删除</button>
     </td>
   </tr>`).join('') + '</tbody>';
 }
-
-function openProductFormById(id){
-  const p = productsCache.find(x=>x.id===id);
-  openProductForm(p);
-}
-
-function openProductForm(p){
-  editingProductId = p ? p.id : null;
-  const cats = meta.categories || [];
+function openProductFormById(id){ openProductForm(productsCache.find(product => product.id === id)); }
+function openProductForm(product){
+  editingProductId = product ? product.id : null;
+  const categories = meta.categories || [];
   const modal = $('#productModal');
   modal.innerHTML = `<div class="modal-card">
-    <div class="modal-head"><h3>${p?'编辑商品':'新增商品'}</h3><button class="modal-close" onclick="closeModal('productModal')">✕</button></div>
+    <div class="modal-head"><h3>${product?'编辑':'新增'}${esc(copy('product_nav', '产品'))}</h3><button class="modal-close" onclick="closeModal('productModal')">✕</button></div>
     <div class="form-grid">
-      <div class="form-field"><label>品牌</label><input id="f-brand" value="${esc(p?p.brand:'')}"></div>
-      <div class="form-field"><label>名称</label><input id="f-name" value="${esc(p?p.name:'')}"></div>
-      <div class="form-field"><label>功效分类</label><select id="f-category">${cats.map(c=>`<option ${p&&p.category===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
-      <div class="form-field"><label>适用肤质</label><input id="f-skin" value="${esc(p?p.skin_type:'')}" placeholder="如 油性/混合"></div>
-      <div class="form-field"><label>价格</label><input id="f-price" value="${esc(p?p.price:'')}" placeholder="如 ¥ 239"></div>
-      <div class="form-field"><label>成分</label><input id="f-ing" value="${esc(p?p.ingredients:'')}" placeholder="逗号分隔"></div>
-      <div class="form-field full"><label>说明</label><textarea id="f-desc" rows="2">${esc(p?p.description:'')}</textarea></div>
+      <div class="form-field"><label>品牌</label><input id="product-brand" value="${esc(product?product.brand:'')}"></div>
+      <div class="form-field"><label>名称</label><input id="product-name" value="${esc(product?product.name:'')}"></div>
+      <div class="form-field"><label>${esc(copy('product_category_label', '分类'))}</label><select id="product-category">${categories.map(category => `<option ${product&&product.category===category?'selected':''}>${esc(category)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>${esc(copy('product_target_label', '适用对象'))}</label><input id="product-target" value="${esc(product?product.target:'')}"></div>
+      <div class="form-field"><label>价格</label><input id="product-price" value="${esc(product?product.price:'')}"></div>
+      <div class="form-field"><label>${esc(copy('product_features_label', '特点'))}</label><input id="product-features" value="${esc(product?product.features:'')}"></div>
+      <div class="form-field full"><label>说明</label><textarea id="product-description" rows="2">${esc(product?product.description:'')}</textarea></div>
     </div>
     <div class="form-actions">
       <button class="ghost-btn" onclick="closeModal('productModal')">取消</button>
@@ -557,18 +644,17 @@ function openProductForm(p){
   </div>`;
   modal.classList.add('open');
 }
-
 async function saveProduct(){
   const body = {
-    brand: $('#f-brand').value.trim(),
-    name: $('#f-name').value.trim(),
-    category: $('#f-category').value,
-    skin_type: $('#f-skin').value.trim(),
-    ingredients: $('#f-ing').value.trim(),
-    price: $('#f-price').value.trim(),
-    description: $('#f-desc').value.trim(),
+    brand: $('#product-brand').value.trim(),
+    name: $('#product-name').value.trim(),
+    category: $('#product-category').value,
+    target: $('#product-target').value.trim(),
+    features: $('#product-features').value.trim(),
+    price: $('#product-price').value.trim(),
+    description: $('#product-description').value.trim()
   };
-  if(!body.name){ alert('请填写商品名称'); return; }
+  if(!body.name){ alert('请填写产品名称'); return; }
   if(editingProductId){
     await api('/api/products/'+editingProductId, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   }else{
@@ -577,23 +663,28 @@ async function saveProduct(){
   closeModal('productModal');
   loadProducts();
 }
-
 async function deleteProduct(id){
-  if(!confirm('确定删除该商品？')) return;
+  if(!confirm('确定删除该产品？')) return;
   await api('/api/products/'+id, {method:'DELETE'});
   loadProducts();
 }
+function closeModal(id){ $('#'+id).classList.remove('open'); }
 
-// ===== 初始化 =====
+// ===== Initialize =====
 async function init(){
+  let health = null;
   try{
-    const h = await api('/api/health');
-    const st = $('#sideStatus');
-    privacyMode = h.privacy || 'local_llm';
-    st.textContent = privacyMode === 'local_llm' ? '在线 · 本地模型模式' : '在线 · 外部模型模式';
-    st.classList.add('ok');
+    health = await api('/api/health');
+    privacyMode = health.privacy || 'local_llm';
   }catch(e){
     $('#sideStatus').textContent = '连接失败';
+  }
+  try{ meta = await api('/api/meta'); }catch(e){}
+  applyProfile(meta);
+  if(health){
+    const status = $('#sideStatus');
+    status.textContent = '在线 · ' + copy(privacyMode === 'local_llm' ? 'privacy_local' : 'privacy_external');
+    status.classList.add('ok');
   }
   try{ await api('/api/session'); }catch(e){}
   try{
@@ -603,8 +694,6 @@ async function init(){
   }catch(e){
     isAdmin = false;
   }
-  try{ meta = await api('/api/meta'); }catch(e){}
   if(isAdmin){ loadCustomers(); loadProducts(); }
-  $('#chatBox').innerHTML = `<div class="msg ai"><div class="avatar-sm">小肤</div><div class="bubble">你好，我是 AI 护肤内容助手「小肤」。<br>你可以问我：<br>· 推荐一款祛痘产品<br>· 烟酰胺有什么作用？<br>· 如何看懂检测分数？<br><br><small>本工具提供一般护肤信息，不提供医疗诊断，也不能替代医生。</small></div></div>`;
 }
 init();

@@ -7,6 +7,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [skin_care, hair_care]
+    env:
+      APP_PROFILE: ${{ matrix.profile }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,7 +22,7 @@ jobs:
       - name: Install uv
         run: pip install uv==0.12.13
       - name: Install locked dependencies
-        run: uv sync --frozen --extra dev
+        run: uv sync --frozen --no-install-project --extra dev
       - name: Lint
         run: uv run ruff check app tests
       - name: Test

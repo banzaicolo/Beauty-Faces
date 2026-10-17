@@ -18,7 +18,7 @@ def get_agent():
     if _agent is None:
         config.DATA_DIR.mkdir(parents=True, exist_ok=True)
         # SqliteSaver 直接收 sqlite3 连接；check_same_thread=False 允许跨线程
-        conn = sqlite3.connect(str(config.DATA_DIR / "checkpoints.db"), check_same_thread=False)
+        conn = sqlite3.connect(str(config.CHECKPOINT_DB_PATH), check_same_thread=False)
         memory = SqliteSaver(conn)
         model = get_chat_model()
         system_prompt = config.load_text("system_prompt.txt")

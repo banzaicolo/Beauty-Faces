@@ -1,7 +1,7 @@
 [project]
 name = "beauty-faces"
 version = "0.1.0"
-description = "Local-first AI skincare consultation demo with Ollama and LangGraph"
+description = "Profile-driven local-first AI recommendation assistant with Ollama and LangGraph"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

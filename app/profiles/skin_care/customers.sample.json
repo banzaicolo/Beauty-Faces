@@ -1,14 +1,16 @@
 [
   {
-    "id": "sample-001",
+    "id": "skin-sample-001",
     "name": "示例顾客 A",
     "age": "26",
     "sex": "女",
-    "skinAge": "25",
     "score": "68",
-    "nature": "混合型皮肤",
-    "ph": "5.6",
-    "water": "36",
+    "attributes": {
+      "segment": "混合型皮肤",
+      "skin_age": "25",
+      "age": "26",
+      "sex": "女"
+    },
     "items": {
       "水分": 36,
       "油脂": 52,
@@ -29,15 +31,17 @@
     "avatar": ""
   },
   {
-    "id": "sample-002",
+    "id": "skin-sample-002",
     "name": "示例顾客 B",
     "age": "34",
     "sex": "女",
-    "skinAge": "36",
     "score": "61",
-    "nature": "干性皮肤",
-    "ph": "5.8",
-    "water": "29",
+    "attributes": {
+      "segment": "干性皮肤",
+      "skin_age": "36",
+      "age": "34",
+      "sex": "女"
+    },
     "items": {
       "水分": 29,
       "油脂": 38,
@@ -57,15 +61,17 @@
     "avatar": ""
   },
   {
-    "id": "sample-003",
+    "id": "skin-sample-003",
     "name": "示例顾客 C",
     "age": "42",
     "sex": "男",
-    "skinAge": "44",
     "score": "57",
-    "nature": "油性皮肤",
-    "ph": "5.4",
-    "water": "42",
+    "attributes": {
+      "segment": "油性皮肤",
+      "skin_age": "44",
+      "age": "42",
+      "sex": "男"
+    },
     "items": {
       "水分": 42,
       "油脂": 34,
@@ -84,15 +90,17 @@
     "avatar": ""
   },
   {
-    "id": "sample-004",
+    "id": "skin-sample-004",
     "name": "示例顾客 D",
     "age": "29",
     "sex": "女",
-    "skinAge": "28",
     "score": "72",
-    "nature": "中性皮肤",
-    "ph": "5.7",
-    "water": "44",
+    "attributes": {
+      "segment": "中性皮肤",
+      "skin_age": "28",
+      "age": "29",
+      "sex": "女"
+    },
     "items": {
       "水分": 44,
       "油脂": 66,
@@ -101,7 +109,7 @@
       "皱纹": 70,
       "胶原": 68,
       "混合斑": 63,
-      "肤色均匀度": 61
+      "浅层色素": 61
     },
     "analysis": "这是一条完全虚构的演示记录，仅用于展示页面与推荐流程。",
     "advice": [

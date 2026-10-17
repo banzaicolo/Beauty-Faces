@@ -6,5 +6,7 @@ Contributions are welcome, but this repository must remain safe to clone and sha
 - Use synthetic fixtures for tests and examples.
 - Do not add third-party datasets or product images without recording the source and redistribution license.
 - Add or update tests for authentication, privacy, recommendation, or data-access changes.
+- When adding a domain, keep terminology and fixtures inside `app/profiles/`; do not add domain-specific branches to the core engine.
+- Run the test suite with both `APP_PROFILE=skin_care` and `APP_PROFILE=hair_care`.
 - Run `ruff check app tests` and `pytest` before opening a pull request.
 - Keep medical claims conservative. This project is a skincare content demo, not a diagnostic device.

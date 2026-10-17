@@ -11,6 +11,7 @@ os.environ["ADMIN_TOKEN"] = "test-admin-token-not-for-release"
 os.environ["SESSION_SECRET"] = "test-session-secret-with-more-than-32-characters"
 os.environ["SEED_DEMO"] = "1"
 os.environ["COOKIE_SECURE"] = "false"
+os.environ.setdefault("APP_PROFILE", "skin_care")
 
 from app.seed import seed  # noqa: E402
 

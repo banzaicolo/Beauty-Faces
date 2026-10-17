@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "id": "skin_care",
+  "version": "0.2.0",
+  "branding": {
+    "name": "Beauty Faces",
+    "tagline": "本地优先的护肤推荐助手"
+  },
+  "copy": {
+    "assistant_name": "小肤",
+    "chat_title": "智能顾问",
+    "chat_subtitle": "护肤推荐 · 多轮对话 · 自动查库",
+    "chat_placeholder": "问我：推荐祛痘产品？烟酰胺有什么用？如何看懂检测分数？",
+    "chat_examples": [
+      "推荐一款控油产品",
+      "烟酰胺有什么特点？",
+      "如何看懂检测分数？"
+    ],
+    "service_group": "顾客服务",
+    "admin_group": "门店管理",
+    "chat_nav": "智能顾问",
+    "assessment_nav": "拍照测肤",
+    "customer_nav": "客户管理",
+    "product_nav": "商品库",
+    "customers_title": "客户管理",
+    "add_customer": "＋ 新增客户",
+    "customer_search_placeholder": "搜索姓名 / 肤龄 / 综合分…",
+    "assessment_title": "拍照测肤",
+    "assessment_subtitle": "一般性皮肤外观观察，不提供医疗诊断",
+    "assessment_upload": "选择照片 / 拍照",
+    "assessment_start": "开始分析",
+    "assessment_hint": "建议上传光线充足的清晰正脸或局部照片。照片会发送到所配置的视觉模型服务，请先取得被拍摄者同意；默认部署使用本地 Ollama。破溃、明显疼痛或快速变化的情况请咨询医生。",
+    "products_title": "商品库",
+    "add_product": "＋ 新增商品",
+    "product_search_placeholder": "搜索品牌 / 名称 / 成分…",
+    "customer_detail_title": "客户检测报告",
+    "analysis_title": "记录摘要",
+    "advice_title": "护理建议",
+    "dimension_heading": "皮肤维度",
+    "item_heading": "检测项目评分",
+    "recommendation_heading": "为你推荐",
+    "report_button": "生成 AI 护肤报告",
+    "save_customer": "存为客户",
+    "send_to_advisor": "发给智能顾问",
+    "disclaimer": "本工具提供一般护肤信息，不提供医疗诊断，也不能替代医生。",
+    "privacy_local": "本地模型模式",
+    "privacy_external": "外部模型模式",
+    "product_target_label": "适用肤质",
+    "product_features_label": "成分",
+    "product_category_label": "功效分类",
+    "knowledge_entity": "成分"
+  },
+  "higher_is_better": true,
+  "customer_fields": [
+    {
+      "key": "segment",
+      "label": "肤质",
+      "type": "select",
+      "options": [
+        "中性皮肤",
+        "干性皮肤",
+        "油性皮肤",
+        "混合型皮肤",
+        "敏感肌"
+      ],
+      "filterable": true
+    },
+    {
+      "key": "age",
+      "label": "年龄",
+      "type": "number",
+      "unit": "岁"
+    },
+    {
+      "key": "sex",
+      "label": "性别",
+      "type": "select",
+      "options": ["女", "男", "其他", "不填写"]
+    },
+    {
+      "key": "skin_age",
+      "label": "肤龄",
+      "type": "number",
+      "unit": "岁"
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "hydration",
+      "label": "补水保湿",
+      "category": "补水保湿",
+      "items": [
+        {"key": "水分", "label": "水分", "weight": 1}
+      ]
+    },
+    {
+      "id": "aging",
+      "label": "抗皱紧致",
+      "category": "抗皱紧致",
+      "items": [
+        {"key": "皱纹", "label": "皱纹", "weight": 1},
+        {"key": "胶原", "label": "胶原", "weight": 1}
+      ]
+    },
+    {
+      "id": "oil_control",
+      "label": "控油祛痘",
+      "category": "控油祛痘",
+      "items": [
+        {"key": "油脂", "label": "油脂", "weight": 1},
+        {"key": "黑头", "label": "黑头", "weight": 1},
+        {"key": "毛孔", "label": "毛孔", "weight": 1},
+        {"key": "痤疮", "label": "痤疮", "weight": 1},
+        {"key": "卟啉", "label": "卟啉", "weight": 1}
+      ]
+    },
+    {
+      "id": "soothing",
+      "label": "舒缓修护",
+      "category": "舒缓修护",
+      "items": [
+        {"key": "敏感红素图", "label": "敏感红素", "weight": 1},
+        {"key": "敏感热力图", "label": "敏感热力", "weight": 1},
+        {"key": "屏障", "label": "屏障", "weight": 1}
+      ]
+    },
+    {
+      "id": "brightening",
+      "label": "美白淡斑",
+      "category": "美白淡斑",
+      "items": [
+        {"key": "棕色色素", "label": "棕色色素", "weight": 1},
+        {"key": "浅层色素", "label": "浅层色素", "weight": 1},
+        {"key": "深层色素", "label": "深层色素", "weight": 1},
+        {"key": "混合斑", "label": "混合斑", "weight": 1},
+        {"key": "色素热力图", "label": "色素热力", "weight": 1}
+      ]
+    }
+  ],
+  "recommendation": {
+    "top_dimensions": 3,
+    "products_per_dimension": 3
+  },
+  "assessment": {
+    "enabled": true,
+    "prompt_file": "vlm_prompt.txt",
+    "extra_items": ["荧光剂"]
+  },
+  "alerts": [
+    {
+      "item": "荧光剂",
+      "operator": "lt",
+      "threshold": 40,
+      "message": "荧光剂指标偏低，建议结合实际情况复核并加强基础清洁。"
+    }
+  ]
+}

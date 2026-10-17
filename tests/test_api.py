@@ -1,11 +1,10 @@
-import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
-from app import config
+from app import config, rules
 from app.main import app
 
 
@@ -25,8 +24,9 @@ def test_admin_routes_use_http_only_cookie():
 
 
 def test_customer_report_is_admin_only():
+    customer_id = config.PROFILE.read_json("customers.sample.json")[0]["id"]
     with TestClient(app) as client:
-        response = client.post("/api/ai-report", json={"customer_id": "sample-001"})
+        response = client.post("/api/ai-report", json={"customer_id": customer_id})
         assert response.status_code == 401
 
 
@@ -41,8 +41,8 @@ def test_product_edit_preserves_existing_image():
                 "brand",
                 "name",
                 "category",
-                "skin_type",
-                "ingredients",
+                "target",
+                "features",
                 "price",
                 "description",
             )
@@ -55,15 +55,22 @@ def test_product_edit_preserves_existing_image():
 def test_structured_customer_items_round_trip():
     with TestClient(app) as client:
         login(client)
+        dimension = config.PUBLIC_PROFILE["dimensions"][0]
+        item_key = dimension["items"][0]["key"]
+        filter_field = next(
+            field for field in config.PUBLIC_PROFILE["customer_fields"] if field["filterable"]
+        )
         payload = {
             "name": "合成测试客户",
             "age": "30",
-            "items": {"水分": 35, "油脂": 42},
+            "items": {item_key: 35},
+            "attributes": {filter_field["key"]: filter_field.get("options", ["测试"])[0]},
             "advice": ["这是一条测试建议"],
         }
         created = client.post("/api/customers", json=payload)
         assert created.status_code == 200
         assert created.json()["items"] == payload["items"]
+        assert created.json()["attributes"] == payload["attributes"]
         assert created.json()["advice"] == payload["advice"]
 
 
@@ -77,11 +84,10 @@ def test_session_and_security_headers():
 
 
 def test_public_fixtures_are_synthetic():
-    root = Path(__file__).resolve().parents[1]
-    customers = json.loads((root / "app/configs/customers.sample.json").read_text(encoding="utf-8"))
-    products = json.loads((root / "app/configs/products_seed.json").read_text(encoding="utf-8"))
+    customers = config.PROFILE.read_json("customers.sample.json")
+    products = config.PROFILE.read_json("products.sample.json")
     assert customers
-    assert all(item["id"].startswith("sample-") for item in customers)
+    assert all("-sample-" in item["id"] for item in customers)
     assert all(not item.get("avatar") for item in customers)
     assert all(item["image"] == "/product-placeholder.svg" for item in products)
 
@@ -91,7 +97,7 @@ def test_static_frontend_and_placeholder_render():
         page = client.get("/")
         placeholder = client.get("/product-placeholder.svg")
         assert page.status_code == 200
-        assert "Beauty Faces" in page.text
+        assert config.PUBLIC_PROFILE["branding"]["name"]
         assert placeholder.status_code == 200
         assert placeholder.headers["content-type"].startswith("image/svg+xml")
 
@@ -102,6 +108,7 @@ def test_original_private_assets_are_not_in_public_release():
         "archive",
         "客户数据_伊斯佳",
         "demo/data.js",
+        "app/configs",
         "app/configs/customers_seed.json",
         "data/app.db",
         "data/checkpoints.db",
@@ -140,3 +147,28 @@ def test_chat_thread_is_scoped_to_signed_session(monkeypatch):
     assert len(thread_ids) == 2
     assert thread_ids[0] != thread_ids[1]
     assert all(thread_id.endswith(conversation_id) for thread_id in thread_ids)
+
+
+def test_profile_meta_drives_dimensions_and_categories():
+    with TestClient(app) as client:
+        meta = client.get("/api/meta")
+        assert meta.status_code == 200
+        payload = meta.json()
+        assert payload["id"] == config.PROFILE.id
+        assert payload["dimensions"]
+        assert payload["categories"] == [
+            dimension["category"] for dimension in payload["dimensions"]
+        ]
+        assert payload["filter_key"] in {field["key"] for field in payload["customer_fields"]}
+
+
+def test_recommendation_respects_profile_limits():
+    customer = config.PROFILE.read_json("customers.sample.json")[0]
+    recommendations = rules.recommend(customer["items"])
+    settings = config.PUBLIC_PROFILE["recommendation"]
+    assert len(recommendations) <= settings["top_dimensions"]
+    assert all(
+        len(recommendation["products"]) <= settings["products_per_dimension"]
+        for recommendation in recommendations
+    )
+    assert all(recommendation["products"] for recommendation in recommendations)

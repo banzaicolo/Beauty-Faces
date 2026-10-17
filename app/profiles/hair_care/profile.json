@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "id": "hair_care",
+  "version": "0.2.0",
+  "branding": {
+    "name": "Hair Compass",
+    "tagline": "本地优先的头发护理推荐助手"
+  },
+  "copy": {
+    "assistant_name": "小发",
+    "chat_title": "护发顾问",
+    "chat_subtitle": "头发护理推荐 · 多轮对话 · 自动查库",
+    "chat_placeholder": "问我：推荐蓬松洗发水？咖啡因有什么特点？",
+    "chat_examples": [
+      "推荐一款控油蓬松产品",
+      "氨基酸表活有什么特点？",
+      "如何理解护理评分？"
+    ],
+    "service_group": "护理服务",
+    "admin_group": "客户与产品",
+    "chat_nav": "护发顾问",
+    "assessment_nav": "照片观察",
+    "customer_nav": "客户档案",
+    "product_nav": "产品库",
+    "customers_title": "客户档案",
+    "add_customer": "＋ 新增档案",
+    "customer_search_placeholder": "搜索姓名 / 发质 / 评分…",
+    "assessment_title": "头发照片观察",
+    "assessment_subtitle": "一般性外观观察，不提供医疗诊断",
+    "assessment_upload": "选择照片 / 拍照",
+    "assessment_start": "开始观察",
+    "assessment_hint": "建议上传光线均匀的头皮或发丝照片。照片会发送到所配置的视觉模型服务，请先取得被拍摄者同意；明显脱发、红肿疼痛或持续加重时请咨询医生。",
+    "products_title": "护理产品库",
+    "add_product": "＋ 新增产品",
+    "product_search_placeholder": "搜索品牌 / 名称 / 特点…",
+    "customer_detail_title": "护理档案",
+    "analysis_title": "记录摘要",
+    "advice_title": "护理建议",
+    "dimension_heading": "头发与头皮维度",
+    "item_heading": "护理指标",
+    "recommendation_heading": "匹配产品",
+    "report_button": "生成 AI 护理建议",
+    "save_customer": "保存为档案",
+    "send_to_advisor": "发给护发顾问",
+    "disclaimer": "本工具提供一般头发护理信息，不提供医疗诊断，也不能替代医生。",
+    "product_target_label": "适用发质",
+    "product_features_label": "主要特点",
+    "product_category_label": "护理分类",
+    "knowledge_entity": "护理成分"
+  },
+  "higher_is_better": true,
+  "customer_fields": [
+    {
+      "key": "hair_type",
+      "label": "发质",
+      "type": "select",
+      "options": [
+        "细软发",
+        "粗硬发",
+        "卷发",
+        "染烫发",
+        "中性发质"
+      ],
+      "filterable": true
+    },
+    {
+      "key": "age",
+      "label": "年龄",
+      "type": "number",
+      "unit": "岁"
+    },
+    {
+      "key": "sex",
+      "label": "性别",
+      "type": "select",
+      "options": ["女", "男", "其他", "不填写"]
+    },
+    {
+      "key": "chemical_history",
+      "label": "染烫情况",
+      "type": "select",
+      "options": [
+        "无",
+        "近期染发",
+        "近期烫发",
+        "染烫均有"
+      ]
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "cleanse",
+      "label": "清洁平衡",
+      "category": "清洁平衡",
+      "items": [
+        {"key": "头皮清爽度", "label": "头皮清爽度", "weight": 1},
+        {"key": "残留感", "label": "清洁残留控制", "weight": 1}
+      ]
+    },
+    {
+      "id": "moisture",
+      "label": "补水润养",
+      "category": "补水润养",
+      "items": [
+        {"key": "头皮水分", "label": "头皮水分", "weight": 1},
+        {"key": "发丝柔顺度", "label": "发丝柔顺度", "weight": 1}
+      ]
+    },
+    {
+      "id": "comfort",
+      "label": "舒缓舒适",
+      "category": "舒缓舒适",
+      "items": [
+        {"key": "舒缓度", "label": "舒缓度", "weight": 1},
+        {"key": "屏障稳定度", "label": "屏障稳定度", "weight": 1}
+      ]
+    },
+    {
+      "id": "strength",
+      "label": "强韧蓬松",
+      "category": "强韧蓬松",
+      "items": [
+        {"key": "发根支撑", "label": "发根支撑", "weight": 1},
+        {"key": "发丝弹性", "label": "发丝弹性", "weight": 1}
+      ]
+    },
+    {
+      "id": "color",
+      "label": "染后护理",
+      "category": "染后护理",
+      "items": [
+        {"key": "发丝光泽", "label": "发丝光泽", "weight": 1},
+        {"key": "颜色稳定度", "label": "颜色稳定度", "weight": 1}
+      ]
+    }
+  ],
+  "recommendation": {
+    "top_dimensions": 3,
+    "products_per_dimension": 2
+  },
+  "assessment": {
+    "enabled": true,
+    "prompt_file": "vlm_prompt.txt"
+  },
+  "alerts": []
+}

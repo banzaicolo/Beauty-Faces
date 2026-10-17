@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Beauty Faces · 本地 AI 护肤内容助手</title>
+<title>Consultation Assistant</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=0.2.1">
 </head>
 <body>
 <div class="layout">
@@ -16,26 +16,26 @@
       <span class="logo-mark">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.7-1.9a2 2 0 0 0 1.3-1.3L12 3z" fill="currentColor" stroke="none"/></svg>
       </span>
-      <span>Beauty Faces</span>
+      <span id="brandName">Consultation Assistant</span>
     </div>
     <nav class="nav">
-      <div class="nav-group">顾客服务</div>
+      <div class="nav-group" id="serviceGroup">顾问服务</div>
       <button class="nav-item active" data-view="chat">
         <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        智能顾问
+        <span id="chatNav">智能顾问</span>
       </button>
       <button class="nav-item" data-view="camera">
         <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        拍照测肤
+        <span id="assessmentNav">照片分析</span>
       </button>
-      <div class="nav-group">门店管理</div>
+      <div class="nav-group" id="adminGroup">管理</div>
       <button class="nav-item" data-view="customers">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        客户管理
+        <span id="customerNav">客户管理</span>
       </button>
       <button class="nav-item" data-view="products">
         <svg viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-        商品库
+        <span id="productNav">产品库</span>
       </button>
     </nav>
     <div class="side-status" id="sideStatus">连接中…</div>
@@ -48,13 +48,13 @@
     <!-- 智能顾问 -->
     <section class="view" id="view-chat">
       <div class="view-head">
-        <h2>智能顾问</h2>
-        <span class="sub" id="chatSub">AI 护肤顾问，多轮对话 · 自动查库</span>
-        <button class="ghost-btn" onclick="newChat()">＋ 新对话</button>
+        <h2 id="chatTitle">智能顾问</h2>
+        <span class="sub" id="chatSub">多轮对话 · 自动查库</span>
+        <button class="ghost-btn" id="newChatBtn" onclick="newChat()">＋ 新对话</button>
       </div>
       <div class="chat-box" id="chatBox"></div>
       <div class="chat-input">
-        <input id="chatInput" placeholder="问我：推荐祛痘产品？烟酰胺有什么用？如何看懂检测分数？…" onkeydown="if(event.key==='Enter'&&!event.shiftKey)sendChat()">
+        <input id="chatInput" placeholder="输入你的问题…" onkeydown="if(event.key==='Enter'&&!event.shiftKey)sendChat()">
         <button class="primary-btn" id="chatBtn" onclick="sendChat()">发送</button>
       </div>
     </section>
@@ -62,11 +62,11 @@
     <!-- 客户管理 -->
     <section class="view" id="view-customers" style="display:none">
       <div class="view-head">
-        <h2>客户管理</h2><span class="sub" id="customerCount"></span>
-        <button class="primary-btn" onclick="openCustomerForm()">＋ 新增客户</button>
+        <h2 id="customersTitle">客户管理</h2><span class="sub" id="customerCount"></span>
+        <button class="primary-btn" id="addCustomerBtn" onclick="openCustomerForm()">＋ 新增客户</button>
       </div>
       <div class="toolbar">
-        <input class="search" id="searchBox" placeholder="搜索姓名 / 肤龄 / 综合分…" oninput="loadCustomers()">
+        <input class="search" id="searchBox" placeholder="搜索客户或标签…" oninput="loadCustomers()">
         <div class="chips" id="chips"></div>
       </div>
       <div class="grid" id="grid"></div>
@@ -74,18 +74,18 @@
 
     <!-- 拍照测肤 -->
     <section class="view" id="view-camera" style="display:none">
-      <div class="view-head"><h2>拍照测肤</h2><span class="sub">一般性皮肤外观观察，不提供医疗诊断</span></div>
+      <div class="view-head"><h2 id="assessmentTitle">照片分析</h2><span class="sub" id="assessmentSub">一般性外观观察</span></div>
       <div class="panel vlm-panel">
         <div class="vlm-upload">
           <label class="pick-btn" for="vlmFile">
             <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            选择照片 / 拍照
+            <span id="assessmentUpload">选择照片 / 拍照</span>
           </label>
           <input type="file" id="vlmFile" accept="image/*" capture="environment">
           <img id="vlmPreview" class="vlm-preview" alt="预览">
           <button class="primary-btn blue" id="vlmBtn" onclick="vlmAnalyze()" disabled>开始分析</button>
         </div>
-        <div class="hint">建议上传光线充足的清晰正脸或局部照片。照片会发送到所配置的视觉模型服务，请先取得被拍摄者同意；默认部署使用本地 Ollama。破溃、明显疼痛或快速变化的情况请咨询医生。</div>
+        <div class="hint" id="assessmentHint">照片会发送到所配置的视觉模型服务，请先取得被拍摄者同意。</div>
         <div id="vlmResult"></div>
       </div>
     </section>
@@ -93,11 +93,11 @@
     <!-- 商品库 -->
     <section class="view" id="view-products" style="display:none">
       <div class="view-head">
-        <h2>商品库</h2><span class="sub" id="productCount"></span>
-        <button class="primary-btn" onclick="openProductForm()">＋ 新增商品</button>
+        <h2 id="productsTitle">产品库</h2><span class="sub" id="productCount"></span>
+        <button class="primary-btn" id="addProductBtn" onclick="openProductForm()">＋ 新增产品</button>
       </div>
       <div class="toolbar">
-        <input class="search" id="productSearch" placeholder="搜索品牌 / 名称 / 成分…" oninput="loadProducts()">
+        <input class="search" id="productSearch" placeholder="搜索品牌 / 名称 / 特点…" oninput="loadProducts()">
       </div>
       <div class="table-wrap"><table id="productTable"></table></div>
     </section>
@@ -114,6 +114,6 @@
 <!-- 门店登录弹层 -->
 <div class="modal" id="adminModal" onclick="if(event.target===this)closeModal('adminModal')"></div>
 
-<script src="app.js"></script>
+<script src="app.js?v=0.2.1"></script>
 </body>
 </html>

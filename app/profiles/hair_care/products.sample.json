@@ -1,0 +1,102 @@
+[
+  {
+    "brand": "示例护理品牌 A",
+    "name": "清爽蓬松洗发水",
+    "category": "清洁平衡",
+    "target": "油性头皮 / 细软发",
+    "features": "温和表活、清爽配方",
+    "price": "示例价 ¥79",
+    "description": "虚构产品，用于展示清洁平衡推荐。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 B",
+    "name": "头皮净澈预洗",
+    "category": "清洁平衡",
+    "target": "易出油头皮",
+    "features": "水杨酸、薄荷醇",
+    "price": "示例价 ¥99",
+    "description": "虚构产品，用于展示周期性清洁思路。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 A",
+    "name": "补水护发素",
+    "category": "补水润养",
+    "target": "干性发丝",
+    "features": "透明质酸、甘油",
+    "price": "示例价 ¥89",
+    "description": "虚构产品，用于展示基础润养。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 C",
+    "name": "柔顺免洗精华",
+    "category": "补水润养",
+    "target": "毛躁发丝",
+    "features": "角鲨烷、泛醇",
+    "price": "示例价 ¥119",
+    "description": "虚构产品，用于展示免洗柔顺护理。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 B",
+    "name": "舒缓头皮精华",
+    "category": "舒缓舒适",
+    "target": "敏感头皮",
+    "features": "积雪草、泛醇",
+    "price": "示例价 ¥129",
+    "description": "虚构产品，用于展示舒缓方向。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 C",
+    "name": "温和屏障洗发水",
+    "category": "舒缓舒适",
+    "target": "干性 / 敏感头皮",
+    "features": "氨基酸表活、神经酰胺",
+    "price": "示例价 ¥109",
+    "description": "虚构产品，用于展示温和清洁方向。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 D",
+    "name": "发根支撑喷雾",
+    "category": "强韧蓬松",
+    "target": "细软发",
+    "features": "轻盈聚合物、咖啡因",
+    "price": "示例价 ¥99",
+    "description": "虚构产品，用于展示蓬松造型方向。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 D",
+    "name": "咖啡因头皮精华",
+    "category": "强韧蓬松",
+    "target": "中性 / 油性头皮",
+    "features": "咖啡因、烟酰胺",
+    "price": "示例价 ¥139",
+    "description": "虚构产品，用于展示头皮精华方向。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 C",
+    "name": "染后锁色发膜",
+    "category": "染后护理",
+    "target": "染后发质",
+    "features": "泛醇、植物油",
+    "price": "示例价 ¥149",
+    "description": "虚构产品，用于展示染后润养。",
+    "image": "/product-placeholder.svg"
+  },
+  {
+    "brand": "示例护理品牌 A",
+    "name": "光泽修护发油",
+    "category": "染后护理",
+    "target": "干枯 / 染烫发",
+    "features": "角鲨烷、维生素 E",
+    "price": "示例价 ¥119",
+    "description": "虚构产品，用于展示光泽护理。",
+    "image": "/product-placeholder.svg"
+  }
+]

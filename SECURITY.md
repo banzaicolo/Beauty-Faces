@@ -11,6 +11,7 @@ Please report suspected vulnerabilities privately to the repository owner instea
 ## Deployment boundaries
 
 - This repository is a single-node reference implementation, not a certified medical product.
+- Session cookies are scoped to the active `APP_PROFILE`, and profile data uses separate database files.
 - Keep `APP_BIND=127.0.0.1` unless access is protected by HTTPS, authentication, and network controls.
 - Use a unique `ADMIN_TOKEN` and `SESSION_SECRET`. Never commit `.env`.
 - Only use a trusted `OLLAMA_URL`. An apparently local interface may still send prompts to a remote host if configured that way.

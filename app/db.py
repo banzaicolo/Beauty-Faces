@@ -1,42 +1,43 @@
-"""SQLite data access for customers, products, and ingredients."""
+"""SQLite data access for generic customer, product, and knowledge records."""
 
 import json
 import sqlite3
+import uuid
 
 from . import config
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS customers (
-  id         TEXT PRIMARY KEY,
-  name       TEXT,
-  age        TEXT,
-  sex        TEXT,
-  nature     TEXT,
-  ph         TEXT,
-  water      TEXT,
-  score      TEXT,
-  skin_age   TEXT,
-  items      TEXT,        -- 检测项目分数 JSON
-  analysis   TEXT,        -- 问题分析文案
-  advice     TEXT,        -- 护理建议 JSON 数组
-  avatar     TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  id          TEXT PRIMARY KEY,
+  name        TEXT,
+  age         TEXT,
+  sex         TEXT,
+  segment     TEXT,
+  score       TEXT,
+  items       TEXT,
+  attributes  TEXT,
+  analysis    TEXT,
+  advice      TEXT,
+  avatar      TEXT,
+  created_at  TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS products (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   brand       TEXT,
   name        TEXT,
   category    TEXT,
-  skin_type   TEXT,
-  ingredients TEXT,
+  target      TEXT,
+  features    TEXT,
   price       TEXT,
   description TEXT,
-  image       TEXT
+  image       TEXT,
+  attributes  TEXT
 );
-CREATE TABLE IF NOT EXISTS ingredients (
-  name    TEXT PRIMARY KEY,
-  effect  TEXT,
-  caution TEXT
+CREATE TABLE IF NOT EXISTS knowledge_items (
+  name        TEXT PRIMARY KEY,
+  summary     TEXT,
+  caution     TEXT,
+  attributes  TEXT
 );
 """
 
@@ -45,97 +46,181 @@ def get_conn():
     config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(config.DB_PATH), timeout=10)
     conn.row_factory = sqlite3.Row
-    # 并发加固：写锁等待 5 秒（默认 5 秒即抛错），避免多请求同时写直接报 busy
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
 def init_db():
     conn = get_conn()
-    # WAL 模式：读不阻塞写、写不阻塞读，多用户并发时性能与稳定性远好于默认 journal
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(SCHEMA)
     _ensure_columns(conn)
+    _migrate_legacy_columns(conn)
     conn.commit()
     conn.close()
 
 
+def _column_names(conn, table: str) -> set[str]:
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
 def _ensure_columns(conn):
-    """旧库自动迁移：products 缺 image 列就补上（不破坏已有数据）"""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(products)")}
-    if "image" not in cols:
-        conn.execute("ALTER TABLE products ADD COLUMN image TEXT")
+    customer_columns = {
+        "segment": "TEXT",
+        "score": "TEXT",
+        "attributes": "TEXT",
+    }
+    product_columns = {
+        "target": "TEXT",
+        "features": "TEXT",
+        "attributes": "TEXT",
+    }
+    for table, columns in (
+        ("customers", customer_columns),
+        ("products", product_columns),
+    ):
+        existing = _column_names(conn, table)
+        for name, column_type in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {column_type}")
 
 
-def _row2dict(r):
-    return dict(r) if r is not None else None
+def _migrate_legacy_columns(conn):
+    customer_columns = _column_names(conn, "customers")
+    if "nature" in customer_columns:
+        conn.execute(
+            "UPDATE customers SET segment=nature "
+            "WHERE (segment IS NULL OR segment='') AND nature IS NOT NULL"
+        )
+    if "skin_age" in customer_columns:
+        rows = conn.execute("SELECT id,ph,water,skin_age,attributes FROM customers").fetchall()
+        for row in rows:
+            if row["attributes"]:
+                continue
+            attributes = {
+                key: row[key] for key in ("ph", "water", "skin_age") if row[key] not in (None, "")
+            }
+            if attributes:
+                conn.execute(
+                    "UPDATE customers SET attributes=? WHERE id=?",
+                    (json.dumps(attributes, ensure_ascii=False), row["id"]),
+                )
+
+    product_columns = _column_names(conn, "products")
+    if "skin_type" in product_columns:
+        conn.execute(
+            "UPDATE products SET target=skin_type "
+            "WHERE (target IS NULL OR target='') AND skin_type IS NOT NULL"
+        )
+    if "ingredients" in product_columns:
+        conn.execute(
+            "UPDATE products SET features=ingredients "
+            "WHERE (features IS NULL OR features='') AND ingredients IS NOT NULL"
+        )
+
+    tables = {
+        row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    if "ingredients" in tables:
+        conn.execute(
+            "INSERT OR IGNORE INTO knowledge_items(name,summary,caution) "
+            "SELECT name,effect,caution FROM ingredients"
+        )
 
 
-# ---------- 客户 ----------
+def _row2dict(row):
+    return dict(row) if row is not None else None
 
 
-def list_customers(keyword="", nature=""):
+def _decode_customer(row):
+    data = _row2dict(row)
+    if not data:
+        return None
+    for key in ("items", "attributes", "advice"):
+        raw = data.get(key)
+        if raw:
+            try:
+                data[key] = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                data[key] = {} if key != "advice" else []
+        else:
+            data[key] = {} if key != "advice" else []
+    return data
+
+
+def _decode_product(row):
+    data = _row2dict(row)
+    if not data:
+        return None
+    raw = data.get("attributes")
+    if raw:
+        try:
+            data["attributes"] = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            data["attributes"] = {}
+    else:
+        data["attributes"] = {}
+    return data
+
+
+def list_customers(keyword="", segment=""):
     conn = get_conn()
-    sql = "SELECT id,name,age,sex,nature,ph,water,score,skin_age,avatar FROM customers WHERE 1=1"
+    sql = "SELECT id,name,age,sex,segment,score,attributes,avatar FROM customers WHERE 1=1"
     args = []
-    if nature:
-        sql += " AND nature=?"
-        args.append(nature)
+    if segment:
+        sql += " AND segment=?"
+        args.append(segment)
     if keyword:
         sql += (
-            " AND (name LIKE ? OR age LIKE ? OR skin_age LIKE ? OR score LIKE ? OR nature LIKE ?)"
+            " AND (name LIKE ? OR age LIKE ? OR score LIKE ? "
+            "OR segment LIKE ? OR attributes LIKE ?)"
         )
-        kw = f"%{keyword}%"
-        args += [kw, kw, kw, kw, kw]
-    sql += " ORDER BY score ASC"
+        pattern = f"%{keyword}%"
+        args.extend([pattern] * 5)
+    sql += " ORDER BY name"
     rows = conn.execute(sql, args).fetchall()
     conn.close()
-    return [_row2dict(r) for r in rows]
+    return [_decode_customer(row) for row in rows]
 
 
 def get_customer(cid):
     conn = get_conn()
-    r = conn.execute("SELECT * FROM customers WHERE id=?", (cid,)).fetchone()
+    row = conn.execute("SELECT * FROM customers WHERE id=?", (cid,)).fetchone()
     conn.close()
-    d = _row2dict(r)
-    if d:
-        d["items"] = json.loads(d["items"]) if d.get("items") else {}
-        d["advice"] = json.loads(d["advice"]) if d.get("advice") else []
-    return d
+    return _decode_customer(row)
 
 
 def customer_count():
     conn = get_conn()
-    n = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+    count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
     conn.close()
-    return n
+    return count
 
 
-def add_customer(c):
-    """新增客户（自建/拍照测肤保存），items 留空 dict"""
-    import time
-
-    cid = f"u-{int(time.time() * 1000)}"
+def add_customer(customer):
+    cid = f"u-{uuid.uuid4().hex}"
+    attributes = customer.get("attributes", {})
+    segment = str(attributes.get(config.PROFILE.filter_key, ""))
+    age = attributes.get("age", customer.get("age", ""))
+    sex = attributes.get("sex", customer.get("sex", ""))
     conn = get_conn()
     conn.execute(
         "INSERT INTO customers "
-        "(id,name,age,sex,nature,ph,water,score,skin_age,items,analysis,advice,avatar) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(id,name,age,sex,segment,score,items,attributes,analysis,advice,avatar) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (
             cid,
-            c.get("name", ""),
-            str(c.get("age", "")),
-            c.get("sex", ""),
-            c.get("nature", ""),
-            "",
-            "",
-            "",
-            "",
-            json.dumps(c.get("items", {}), ensure_ascii=False),
-            c.get("analysis", ""),
-            json.dumps(c.get("advice", []), ensure_ascii=False),
-            "",
+            customer.get("name", ""),
+            str(age),
+            sex,
+            segment,
+            str(customer.get("score", "")),
+            json.dumps(customer.get("items", {}), ensure_ascii=False),
+            json.dumps(attributes, ensure_ascii=False),
+            customer.get("analysis", ""),
+            json.dumps(customer.get("advice", []), ensure_ascii=False),
+            customer.get("avatar", ""),
         ),
     )
     conn.commit()
@@ -150,9 +235,6 @@ def delete_customer(cid):
     conn.close()
 
 
-# ---------- 商品 ----------
-
-
 def list_products(category="", keyword=""):
     conn = get_conn()
     sql = "SELECT * FROM products WHERE 1=1"
@@ -161,75 +243,84 @@ def list_products(category="", keyword=""):
         sql += " AND category=?"
         args.append(category)
     if keyword:
-        sql += " AND (brand LIKE ? OR name LIKE ? OR ingredients LIKE ? OR description LIKE ?)"
-        kw = f"%{keyword}%"
-        args += [kw, kw, kw, kw]
-    sql += " ORDER BY category, brand"
+        sql += (
+            " AND (brand LIKE ? OR name LIKE ? OR target LIKE ? "
+            "OR features LIKE ? OR description LIKE ?)"
+        )
+        pattern = f"%{keyword}%"
+        args.extend([pattern] * 5)
+    sql += " ORDER BY category, brand, name"
     rows = conn.execute(sql, args).fetchall()
     conn.close()
-    return [_row2dict(r) for r in rows]
+    return [_decode_product(row) for row in rows]
 
 
 def get_product(pid):
     conn = get_conn()
-    r = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+    row = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
     conn.close()
-    return _row2dict(r)
+    return _decode_product(row)
 
 
-def add_product(p):
+def add_product(product):
     conn = get_conn()
-    cur = conn.execute(
+    cursor = conn.execute(
         "INSERT INTO products "
-        "(brand,name,category,skin_type,ingredients,price,description,image) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "(brand,name,category,target,features,price,description,image,attributes) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (
-            p.get("brand", ""),
-            p.get("name", ""),
-            p.get("category", ""),
-            p.get("skin_type", ""),
-            p.get("ingredients", ""),
-            p.get("price", ""),
-            p.get("description", ""),
-            p.get("image", ""),
+            product.get("brand", ""),
+            product.get("name", ""),
+            product.get("category", ""),
+            product.get("target", ""),
+            product.get("features", ""),
+            product.get("price", ""),
+            product.get("description", ""),
+            product.get("image", ""),
+            json.dumps(product.get("attributes", {}), ensure_ascii=False),
         ),
     )
     conn.commit()
-    pid = cur.lastrowid
+    pid = cursor.lastrowid
     conn.close()
     return get_product(pid)
 
 
-def update_product(pid, p):
+def update_product(pid, product):
     current = get_product(pid)
     if not current:
         return None
+    fields = (
+        "brand",
+        "name",
+        "category",
+        "target",
+        "features",
+        "price",
+        "description",
+        "image",
+    )
     values = {
-        key: p.get(key) if p.get(key) is not None else current.get(key, "")
-        for key in (
-            "brand",
-            "name",
-            "category",
-            "skin_type",
-            "ingredients",
-            "price",
-            "description",
-            "image",
-        )
+        key: (product.get(key) if product.get(key) is not None else current.get(key, ""))
+        for key in fields
     }
+    attributes = product.get("attributes")
+    if attributes is None:
+        attributes = current.get("attributes", {})
     conn = get_conn()
     conn.execute(
-        "UPDATE products SET brand=?,name=?,category=?,skin_type=?,"
-        "ingredients=?,price=?,description=?,image=? WHERE id=?",
+        "UPDATE products SET brand=?,name=?,category=?,target=?,features=?,"
+        "price=?,description=?,image=?,attributes=? WHERE id=?",
         (
             values["brand"],
             values["name"],
             values["category"],
-            values["skin_type"],
-            values["ingredients"],
+            values["target"],
+            values["features"],
             values["price"],
             values["description"],
             values["image"],
+            json.dumps(attributes, ensure_ascii=False),
             pid,
         ),
     )
@@ -245,31 +336,29 @@ def delete_product(pid):
     conn.close()
 
 
-# ---------- 成分 ----------
-
-
-def get_ingredient(name):
+def get_knowledge(name):
     conn = get_conn()
-    r = conn.execute("SELECT * FROM ingredients WHERE name=?", (name,)).fetchone()
+    row = conn.execute("SELECT * FROM knowledge_items WHERE name=?", (name,)).fetchone()
     conn.close()
-    return _row2dict(r)
+    return _row2dict(row)
 
 
-def search_ingredients(keyword=""):
+def search_knowledge(keyword=""):
     conn = get_conn()
     if keyword:
+        pattern = f"%{keyword}%"
         rows = conn.execute(
-            "SELECT * FROM ingredients WHERE name LIKE ? OR effect LIKE ? ORDER BY name",
-            (f"%{keyword}%", f"%{keyword}%"),
+            "SELECT * FROM knowledge_items WHERE name LIKE ? OR summary LIKE ? ORDER BY name",
+            (pattern, pattern),
         ).fetchall()
     else:
-        rows = conn.execute("SELECT * FROM ingredients ORDER BY name").fetchall()
+        rows = conn.execute("SELECT * FROM knowledge_items ORDER BY name").fetchall()
     conn.close()
-    return [_row2dict(r) for r in rows]
+    return [_row2dict(row) for row in rows]
 
 
-def ingredient_count():
+def knowledge_count():
     conn = get_conn()
-    n = conn.execute("SELECT COUNT(*) FROM ingredients").fetchone()[0]
+    count = conn.execute("SELECT COUNT(*) FROM knowledge_items").fetchone()[0]
     conn.close()
-    return n
+    return count
