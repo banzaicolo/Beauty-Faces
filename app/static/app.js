@@ -59,7 +59,8 @@ let editingProductId = null;
 let vlmImageB64 = null;
 let lastAnalysis = '';
 let isAdmin = false;
-let privacyMode = 'local_llm';
+let privacyMode = 'unknown';
+let visionPrivacyMode = 'unknown';
 
 // ===== Profile-driven copy =====
 function setText(id, text){
@@ -86,7 +87,8 @@ function applyProfile(profile){
   setText('assessmentTitle', copy('assessment_title', '照片分析'));
   setText('assessmentSub', copy('assessment_subtitle', '一般性外观观察'));
   setText('assessmentUpload', copy('assessment_upload', '选择照片 / 拍照'));
-  setText('assessmentHint', copy('assessment_hint', '照片会发送到所配置的视觉模型服务。'));
+  const visionPrivacyKey = visionPrivacyMode === 'local' ? 'privacy_local' : visionPrivacyMode === 'external' ? 'privacy_external' : 'privacy_unknown';
+  setText('assessmentHint', `${copy('assessment_hint', '照片会发送到所配置的视觉模型服务。')} 当前视觉请求：${copy(visionPrivacyKey, visionPrivacyKey)}。`);
   setText('productsTitle', copy('products_title', '产品库'));
   setText('addProductBtn', copy('add_product', '＋ 新增产品'));
   setText('logoutBtn', copy('logout', '退出登录'));
@@ -339,7 +341,7 @@ function renderDetailBody(customer){
     <div class="panel" style="background:linear-gradient(135deg,rgba(34,211,238,.06),rgba(129,140,248,.06));border:1px solid rgba(34,211,238,.2)">
       <h3>AI 建议</h3>
       <button class="primary-btn" id="aiBtn" onclick="aiAnalyze()">${esc(copy('report_button', '生成 AI 建议'))}</button>
-      <div class="hint">${privacyMode === 'local_llm' ? '当前使用已配置的本地模型；请确认模型地址受信任。' : '当前使用外部模型，记录内容会发送到所配置的 API。'}</div>
+      <div class="hint">${privacyMode === 'local' ? '当前文本模型标记为本地服务；请确认模型地址受信任。' : privacyMode === 'external' ? '当前文本模型标记为外部服务，记录内容会发送到所配置的 API。' : '模型隐私范围未声明，请查看部署者的模型服务配置。'}</div>
       <div id="aiResult"></div>
     </div>
 
@@ -675,15 +677,20 @@ async function init(){
   let health = null;
   try{
     health = await api('/api/health');
-    privacyMode = health.privacy || 'local_llm';
+    privacyMode = health.privacy || 'unknown';
+    visionPrivacyMode = health.vision_model?.privacy || 'unknown';
   }catch(e){
     $('#sideStatus').textContent = '连接失败';
   }
   try{ meta = await api('/api/meta'); }catch(e){}
+  if(health?.vision_model?.provider === 'disabled'){
+    meta.assessment = {...(meta.assessment || {}), enabled: false};
+  }
   applyProfile(meta);
   if(health){
     const status = $('#sideStatus');
-    status.textContent = '在线 · ' + copy(privacyMode === 'local_llm' ? 'privacy_local' : 'privacy_external');
+    const privacyKey = privacyMode === 'local' ? 'privacy_local' : privacyMode === 'external' ? 'privacy_external' : 'privacy_unknown';
+    status.textContent = '在线 · ' + copy(privacyKey, privacyKey);
     status.classList.add('ok');
   }
   try{ await api('/api/session'); }catch(e){}

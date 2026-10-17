@@ -23,7 +23,7 @@
 - 护肤成分知识库、商品目录和客户检测报告
 - 配置驱动的场景定义，新领域不需要修改核心 Python 或前端代码
 - 默认 `skin_care` 护肤主场景，`hair_care` 仅作为扩展示例
-- Ollama 文本/视觉模型，DeepSeek 可选作文本模型
+- 文本与视觉模型均可选择 Ollama、OpenAI-compatible API 或自定义 Provider
 - LangGraph 多轮对话、工具调用和 SQLite 会话检查点
 - 加权维度评分、方向配置、重点维度排序和产品匹配
 - 动态客户字段、筛选条件、商品属性、警示规则和提示词
@@ -34,16 +34,7 @@
 
 ## 快速启动
 
-### 1. 准备模型
-
-```bash
-ollama pull qwen3.5:4b
-ollama pull qwen3-vl:8b
-```
-
-如果模型标签已变化，修改 `.env` 中的 `LLM_MODEL` 或 `VLM_MODEL`。
-
-### 2. 配置
+### 1. 配置密钥与模型
 
 ```bash
 cp .env.example .env
@@ -55,6 +46,14 @@ cp .env.example .env
 openssl rand -hex 24
 openssl rand -base64 48
 ```
+
+项目不预选模型，也不会替部署者绑定某个模型品牌。文本模型和视觉模型分别通过 `TEXT_*`、`VISION_*` 环境变量配置：
+
+- Ollama 原生接口
+- OpenAI-compatible Chat Completions API
+- 自定义 Python Provider 工厂
+
+`.env.example` 只是 Ollama 配置模板，把模型占位值替换为你自己的模型即可。使用在线 API、vLLM、LM Studio、OpenRouter、DeepSeek 或企业网关时，按 [模型提供商配置](docs/MODEL_PROVIDERS.md) 修改 Provider、模型 ID、Base URL、API Key、请求头和扩展请求体。
 
 默认使用护肤场景：
 
@@ -68,7 +67,7 @@ APP_PROFILE=skin_care
 APP_PROFILE=hair_care
 ```
 
-### 3. Docker 启动
+### 2. Docker 启动
 
 ```bash
 docker compose up --build
@@ -76,9 +75,9 @@ docker compose up --build
 
 打开 <http://127.0.0.1:8000>。
 
-Docker 使用命名卷保存运行数据。需要访问宿主机 Ollama 时，默认地址为 `http://host.docker.internal:11434`。
+Docker 使用命名卷保存运行数据。选择 Ollama 时，容器中的 Base URL 通常要指向宿主机地址；选择外部 API 时，填写该提供商的兼容接口地址。
 
-### 4. 本地 Python 启动
+### 3. 本地 Python 启动
 
 ```bash
 uv venv
@@ -88,6 +87,16 @@ export SESSION_SECRET="$(openssl rand -base64 48)"
 export APP_PROFILE=skin_care
 export SEED_DEMO=1
 export DATA_DIR="./data"
+export TEXT_PROVIDER=openai_compatible
+export TEXT_MODEL="<your-text-model>"
+export TEXT_BASE_URL="https://your-provider.example/v1"
+export TEXT_API_KEY="<your-api-key>"
+export TEXT_PRIVACY_MODE=external
+export VISION_PROVIDER=openai_compatible
+export VISION_MODEL="<your-vision-model>"
+export VISION_BASE_URL="https://your-provider.example/v1"
+export VISION_API_KEY="<your-api-key>"
+export VISION_PRIVACY_MODE=external
 python -m app.seed
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
@@ -103,14 +112,23 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 | `APP_PROFILE` | 否 | `skin_care` | `app/profiles/` 下的场景目录 |
 | `DATA_DIR` | 否 | `./data` | 数据库与检查点目录 |
 | `SEED_DEMO` | 否 | `0` | 为 `1` 时导入 profile 的合成样例 |
-| `OLLAMA_URL` | 否 | `http://localhost:11434` | Ollama 地址 |
-| `LLM_MODEL` | 否 | `qwen3.5:4b` | 文本与工具调用模型 |
-| `VLM_MODEL` | 否 | `qwen3-vl:8b` | 图片观察模型 |
-| `DEEPSEEK_API_KEY` | 否 | 空 | 设置后文本请求改走外部 DeepSeek |
+| `TEXT_PROVIDER` | 是 | 无 | `ollama`、`openai_compatible`、`custom`、`disabled` |
+| `TEXT_MODEL` | 视 Provider | 无 | 部署者选择的文本模型 ID |
+| `TEXT_BASE_URL` | Ollama 必填 | 无 | 文本模型服务地址 |
+| `TEXT_API_KEY` | 否 | 空 | 外部或私有文本 API 密钥 |
+| `TEXT_TOOL_CALLING` | 否 | `true` | 模型是否支持原生工具调用 |
+| `TEXT_PRIVACY_MODE` | 否 | `unknown` | `local`、`external` 或 `unknown` |
+| `VISION_PROVIDER` | 是 | 无 | 视觉模型接入协议 |
+| `VISION_MODEL` | 视 Provider | 无 | 部署者选择的视觉模型 ID |
+| `VISION_BASE_URL` | Ollama 必填 | 无 | 视觉模型服务地址 |
+| `VISION_API_KEY` | 否 | 空 | 外部或私有视觉 API 密钥 |
+| `VISION_PRIVACY_MODE` | 否 | `unknown` | 视觉请求的隐私标记 |
 | `COOKIE_SECURE` | 否 | `false` | HTTPS 部署时设为 `true` |
 | `APP_BIND` | 否 | `127.0.0.1` | Docker 映射地址 |
 
-`OLLAMA_URL` 指向远程主机时，图片和文本同样会离开本机。只有确认该服务受信任后，“本地模型模式”才成立。
+完整的 Base URL、端点覆盖、额外请求头、超时、最大 Token、流式开关和自定义工厂配置见 [docs/MODEL_PROVIDERS.md](docs/MODEL_PROVIDERS.md)。
+
+程序不会根据 URL 自动宣称“离线”或“本地”。部署者必须用 `*_PRIVACY_MODE` 明确标记数据范围；标记为本地仍然需要自行确认实际网络、代理和日志路径。
 
 ## 场景配置
 
@@ -187,6 +205,16 @@ knowledge.json        成分或领域知识条目
 10. 新增完整 `hair_care` 示例，CI 矩阵同时验证两个场景。
 11. profile 启动时校验样例引用、分类、警示指标、提示词和推荐参数。
 
+### 第三轮：模型提供商去锁定
+
+1. 删除代码中绑定的模型名称、默认 Ollama 地址和专用 DeepSeek 分支。
+2. 文本模型和视觉模型改为独立配置。
+3. 支持 Ollama、OpenAI-compatible Chat Completions 和自定义 Python Provider。
+4. Base URL、模型 ID、Key、请求头、扩展请求体、超时、Token 数和流式模式均可配置。
+5. 增加原生工具调用开关；不支持工具调用的模型仍可进行普通多轮对话。
+6. 隐私模式改为显式声明，不再按 Provider 名称自动推断。
+7. 增加 Provider 适配器测试和完整的模型接入文档。
+
 ## 项目结构
 
 ```text
@@ -197,6 +225,7 @@ app/
   auth.py              签名 Cookie 与会话校验
   config.py            环境与 profile 配置
   db.py                通用 SQLite 数据访问与旧库迁移
+  llm.py               文本/视觉 Provider 适配器
   rules.py             加权评分与推荐
   tools.py             profile 无关的只读工具
   main.py              FastAPI API
@@ -205,7 +234,7 @@ app/
   static/              配置驱动前端
 tests/                 API、权限和场景边界测试
 .github/workflows/     skin_care / hair_care 双场景 CI
-docs/                  截图和场景配置指南
+docs/                  截图、场景配置和模型提供商指南
 ```
 
 ## 测试

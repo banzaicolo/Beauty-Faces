@@ -12,6 +12,14 @@ os.environ["SESSION_SECRET"] = "test-session-secret-with-more-than-32-characters
 os.environ["SEED_DEMO"] = "1"
 os.environ["COOKIE_SECURE"] = "false"
 os.environ.setdefault("APP_PROFILE", "skin_care")
+os.environ["TEXT_PROVIDER"] = "ollama"
+os.environ["TEXT_MODEL"] = "test-text-model"
+os.environ["TEXT_BASE_URL"] = "http://localhost:11434"
+os.environ["TEXT_PRIVACY_MODE"] = "local"
+os.environ["VISION_PROVIDER"] = "ollama"
+os.environ["VISION_MODEL"] = "test-vision-model"
+os.environ["VISION_BASE_URL"] = "http://localhost:11434"
+os.environ["VISION_PRIVACY_MODE"] = "local"
 
 from app.seed import seed  # noqa: E402
 

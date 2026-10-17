@@ -26,6 +26,7 @@ PRODUCT_LABEL = config.PUBLIC_PROFILE["copy"]["product_nav"]
 @asynccontextmanager
 async def lifespan(_app):
     config.validate_runtime_config()
+    llm.validate_provider_configuration()
     db.init_db()
     yield
 
@@ -95,9 +96,18 @@ def health():
     return {
         "status": "ok",
         "provider": llm.provider_name(),
-        "privacy": llm.privacy_mode(),
-        "llm": config.LLM_MODEL,
-        "vlm": config.VLM_MODEL,
+        "privacy": llm.text_privacy_mode(),
+        "text_model": {
+            "provider": config.TEXT_PROVIDER,
+            "model": config.TEXT_MODEL or None,
+            "privacy": llm.text_privacy_mode(),
+            "tool_calling": config.TEXT_TOOL_CALLING,
+        },
+        "vision_model": {
+            "provider": config.VISION_PROVIDER,
+            "model": config.VISION_MODEL or None,
+            "privacy": llm.vision_privacy_mode(),
+        },
         "profile": config.PUBLIC_PROFILE["id"],
         "customers": db.customer_count(),
         "products": len(db.list_products()),
@@ -238,7 +248,7 @@ def ai_report(req: ReportRequest, request: Request):
 @app.post("/api/vlm-analyze")
 def vlm_analyze(req: ImageRequest, request: Request):
     rate_limit.enforce("vlm", request)
-    if not config.PUBLIC_PROFILE["assessment"]["enabled"]:
+    if not config.PUBLIC_PROFILE["assessment"]["enabled"] or config.VISION_PROVIDER == "disabled":
         raise HTTPException(404, "This profile does not enable visual assessment")
     image = req.image
     if image.strip().startswith("data:"):

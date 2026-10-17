@@ -53,6 +53,7 @@ DEFAULT_COPY = {
     "disclaimer": "本工具提供一般信息，不能替代专业意见。",
     "privacy_local": "本地模型模式",
     "privacy_external": "外部模型模式",
+    "privacy_unknown": "模型配置模式",
     "product_target_label": "适用对象",
     "product_features_label": "主要特点",
     "product_category_label": "分类",

@@ -14,7 +14,8 @@ Please report suspected vulnerabilities privately to the repository owner instea
 - Session cookies are scoped to the active `APP_PROFILE`, and profile data uses separate database files.
 - Keep `APP_BIND=127.0.0.1` unless access is protected by HTTPS, authentication, and network controls.
 - Use a unique `ADMIN_TOKEN` and `SESSION_SECRET`. Never commit `.env`.
-- Only use a trusted `OLLAMA_URL`. An apparently local interface may still send prompts to a remote host if configured that way.
-- Enabling `DEEPSEEK_API_KEY` sends text prompts and customer report context to an external service.
+- Review every configured `TEXT_BASE_URL`, `VISION_BASE_URL`, endpoint override, SDK, and custom Provider before processing customer data.
+- Set `TEXT_PRIVACY_MODE` and `VISION_PRIVACY_MODE` to match the real network path; `local` is a deployment claim, not an automatic security guarantee.
+- Custom Provider factories execute in the application process. Install and review only trusted code.
 - Do not commit customer databases, chat checkpoints, screenshots containing real people, downloaded datasets, or third-party product packshots.
 - Delete customer data when it is no longer needed. The API supports customer deletion, but database backups and checkpoints may retain older copies.

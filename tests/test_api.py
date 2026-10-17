@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
-from app import config, rules
+from app import config, llm, rules
 from app.main import app
 
 
@@ -122,6 +122,12 @@ def test_runtime_config_fails_closed(monkeypatch):
         config.validate_runtime_config()
 
 
+def test_runtime_config_requires_a_model(monkeypatch):
+    monkeypatch.setattr(config, "TEXT_MODEL", "")
+    with pytest.raises(RuntimeError, match="TEXT_MODEL"):
+        config.validate_runtime_config()
+
+
 def test_chat_thread_is_scoped_to_signed_session(monkeypatch):
     class Chunk:
         content = "ok"
@@ -172,3 +178,14 @@ def test_recommendation_respects_profile_limits():
         for recommendation in recommendations
     )
     assert all(recommendation["products"] for recommendation in recommendations)
+
+
+def test_openai_compatible_text_provider_uses_deployment_settings(monkeypatch):
+    monkeypatch.setattr(config, "TEXT_PROVIDER", "openai_compatible")
+    monkeypatch.setattr(config, "TEXT_MODEL", "customer-selected-model")
+    monkeypatch.setattr(config, "TEXT_BASE_URL", "https://models.example/v1")
+    monkeypatch.setattr(config, "TEXT_API_KEY", "test-key")
+    monkeypatch.setattr(config, "TEXT_TIMEOUT_SECONDS", 42)
+    model = llm.get_chat_model()
+    assert model.model_name == "customer-selected-model"
+    assert str(model.openai_api_base).rstrip("/") == "https://models.example/v1"

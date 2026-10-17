@@ -1,4 +1,4 @@
-"""LangGraph 智能体：ReAct 循环 + 工具调用 + SqliteSaver 多轮记忆（按 thread_id 隔离会话）"""
+"""LangGraph agent with optional native tool calling and SQLite memory."""
 
 import sqlite3
 
@@ -13,7 +13,7 @@ _agent = None
 
 
 def get_agent():
-    """懒加载单例 agent：模型可插拔（ollama/DeepSeek），工具从 tools.py 挂载"""
+    """Build the active chat model and expose tools only when configured."""
     global _agent
     if _agent is None:
         config.DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -22,5 +22,12 @@ def get_agent():
         memory = SqliteSaver(conn)
         model = get_chat_model()
         system_prompt = config.load_text("system_prompt.txt")
-        _agent = create_react_agent(model, ALL_TOOLS, prompt=system_prompt, checkpointer=memory)
+        tools = ALL_TOOLS if config.TEXT_TOOL_CALLING else []
+        if not tools:
+            system_prompt += (
+                "\n\nThis deployment has native tool calling disabled. "
+                "Answer only from user-provided context and the prompt; "
+                "do not claim to have queried the product or knowledge database."
+            )
+        _agent = create_react_agent(model, tools, prompt=system_prompt, checkpointer=memory)
     return _agent
