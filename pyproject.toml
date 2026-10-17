@@ -1,0 +1,33 @@
+[project]
+name = "beauty-faces"
+version = "0.1.0"
+description = "Local-first AI skincare consultation demo with Ollama and LangGraph"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "fastapi==0.143.3",
+  "uvicorn[standard]==0.54.0",
+  "langgraph==1.2.16",
+  "langchain-ollama==1.1.0",
+  "langchain-openai==1.7.2",
+  "langgraph-checkpoint-sqlite==3.1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx==0.28.1",
+  "pytest==9.0.2",
+  "ruff==0.15.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

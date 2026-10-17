@@ -1,0 +1,46 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+.DS_Store
+.workbuddy/
+
+# Runtime databases, checkpoints, uploaded or private customer data
+data/*
+!data/.gitkeep
+private/
+runtime/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Logs and local caches
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+node_modules/
+
+# Research datasets and third-party media must not be committed by accident
+archive/
+datasets/
+客户数据*/
+*.docx
+*.xlsx
+*.pdf
+
+# Keep the repository-owned placeholder, but not downloaded packshots
+data/products/
+*.jpg
+*.jpeg
+*.png
+*.webp
+!app/static/product-placeholder.svg
+!docs/screenshots/*.png

@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${APP_BIND:-127.0.0.1}:8000:8000"
+    volumes:
+      - beauty-faces-data:/app/data
+    environment:
+      DATA_DIR: /app/data
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SEED_DEMO: ${SEED_DEMO:-1}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen3.5:4b}
+      VLM_MODEL: ${VLM_MODEL:-qwen3-vl:8b}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  beauty-faces-data:

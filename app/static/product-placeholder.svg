@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-labelledby="title desc">
+  <title id="title">Generic skincare product placeholder</title>
+  <desc id="desc">A brand-neutral illustration used for synthetic demo products.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eaf8f4"/>
+      <stop offset="1" stop-color="#dbeafe"/>
+    </linearGradient>
+    <linearGradient id="bottle" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d8e3ea"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="640" rx="40" fill="url(#bg)"/>
+  <circle cx="505" cy="135" r="80" fill="#ffffff" opacity=".45"/>
+  <circle cx="120" cy="510" r="105" fill="#7dd3c7" opacity=".18"/>
+  <rect x="236" y="178" width="168" height="74" rx="18" fill="#334155"/>
+  <rect x="206" y="232" width="228" height="300" rx="48" fill="url(#bottle)" stroke="#94a3b8" stroke-width="6"/>
+  <rect x="248" y="315" width="144" height="110" rx="22" fill="#f8fafc" stroke="#cbd5e1" stroke-width="4"/>
+  <path d="M320 345c-16 18-32 34-32 54a32 32 0 0 0 64 0c0-20-16-36-32-54z" fill="#2dd4bf"/>
+  <text x="320" y="585" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" fill="#475569">SYNTHETIC SAMPLE</text>
+</svg>
